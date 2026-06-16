@@ -232,3 +232,52 @@ Pico HID Test Tool repository: docs/PMBUS_TABLE31_GAP_MATRIX.md
 | Date | Change |
 | --- | --- |
 | 2026/06/14 | Initial GitHub README draft created from MCU README template. |
+
+## Mermaid Flow Charts
+
+### Startup Flow
+
+```mermaid
+flowchart TD
+    A[Reset / Power On] --> B[SYS_Init]
+    B --> C[GPIO_Init]
+    C --> D[UART0_Init]
+    D --> E[TIMER1_Init]
+    E --> F[SysTick_enable 1 kHz]
+    F --> G[TimerService_CreateTask]
+    G --> H[pmbus_platform_init]
+    H --> I[pmbus_drv_init]
+    I --> J[Enter main loop]
+    J --> K[TimerService_Dispatch]
+    K --> L[pmbus_platform_background_task]
+    L --> M[pmbus_drv_background_task]
+    M --> N[UART reset command handling]
+    N --> J
+```
+
+### PMBus Transaction Flow
+
+```mermaid
+flowchart TD
+    A[Host START + SLA] --> B{SLA+W or SLA+R}
+    B -->|SLA+W| C[I2C ISR receives command and payload bytes]
+    C --> D{STOP or repeated START}
+    D --> E[Capture RX frame]
+    E --> F[Parse SMBus/PMBus transaction]
+    F --> G{PEC enabled}
+    G -->|Yes| H[Validate write PEC]
+    G -->|No| I[Skip PEC check]
+    H --> J{PEC valid}
+    J -->|No| K[Flag error or NACK path]
+    J -->|Yes| L[Dispatch command]
+    I --> L
+    L --> M[pmbus_platform / pmbus_app shadow data]
+    M --> N[Prepare TX payload]
+    N --> O{Read transaction or repeated START read}
+    O -->|Yes| P[Append read PEC if enabled]
+    P --> Q[I2C ISR shifts TX bytes only]
+    Q --> R[Master NACK / STOP]
+    R --> S[Release frame state]
+    B -->|SLA+R| T[Load prepared TX buffer]
+    T --> P
+```

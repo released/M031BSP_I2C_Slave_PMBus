@@ -1,13 +1,13 @@
+
 CLK_GetCPUFreq : 48000000
 CLK_GetHCLKFreq : 48000000
 CLK_GetHXTFreq :        0
 CLK_GetLXTFreq :        0
 CLK_GetPCLK0Freq : 48000000
 CLK_GetPCLK1Freq : 48000000
-Reset Source <0x00000041>
-0)POR Reset Flag
-6)Reserved.
-power on from POR
+Reset Source <0x00000002>
+1)NRESET Pin Reset Flag
+power on from nRESET pin
 task1 id = 0
 task2 id = 1
 task3 id = 2
@@ -32,23 +32,19 @@ PMBus TX cmd=0x98 (PMBUS_REVISION) proto=4 (READ_BYTE) len=2 value=0x33 | part1=
 PMBus RX cmd=0x00 (PAGE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x00],[0x1B],
 PMBus TX cmd=0x00 (PAGE) proto=4 (READ_BYTE) len=2 raw=00 CE | PEC OK | PEC(tx=0xCE, calc=0xCE)
-PMBus RX cmd=0x00 (PAGE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x00],[0x1B],
-PMBus TX cmd=0x00 (PAGE) proto=4 (READ_BYTE) len=2 raw=00 CE | PEC OK | PEC(tx=0xCE, calc=0xCE)
 PMBus RX cmd=0x01 (OPERATION) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x01],[0x1C],
 PMBus TX cmd=0x01 (OPERATION) proto=4 (READ_BYTE) len=2 raw=80 2C | PEC OK | PEC(tx=0x2C, calc=0x2C)
 PMBus RX cmd=0x01 (OPERATION) raw=3 payload=1 proto=2 rs=0 pec=1 valid=1
 address=0xB4:[0x01],[0x80],[0xDD],
 PMBus write done cmd=0x01 len=1
+PMBus RX cmd=0x01 (OPERATION) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0x01],[0x1C],
+PMBus TX cmd=0x01 (OPERATION) proto=4 (READ_BYTE) len=2 raw=80 2C | PEC OK | PEC(tx=0x2C, calc=0x2C)
 PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x02],[0x15],
-PMBus TX cmd=0x02 (ON_OFF_CONFIG) proto=4 (READ_BYTE) len=2 raw=1A 5E | PEC OK | PEC(tx=0x5E, calc=0x5E)
 PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=3 payload=1 proto=2 rs=0 pec=1 valid=1
 address=0xB4:[0x02],[0x1B],[0x2A],
-PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x02],[0x15],
-PMBus TX cmd=0x02 (ON_OFF_CONFIG) proto=4 (READ_BYTE) len=2 raw=1B 59 | PEC OK | PEC(tx=0x59, calc=0x59)
 PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x02],[0x15],
 PMBus TX cmd=0x02 (ON_OFF_CONFIG) proto=4 (READ_BYTE) len=2 raw=1A 5E | PEC OK | PEC(tx=0x5E, calc=0x5E)
@@ -62,43 +58,28 @@ address=0xB4:[0x3A],[0xBD],
 PMBus TX cmd=0x3A (FAN_CONFIG_1_2) proto=4 (READ_BYTE) len=2 raw=00 A8 | PEC OK | PEC(tx=0xA8, calc=0xA8)
 PMBus RX cmd=0x20 (VOUT_MODE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x20],[0xFB],
-PMBus TX cmd=0x20 (VOUT_MODE) proto=4 (READ_BYTE) len=2 raw=17 E8 | PEC OK | PEC(tx=0xE8, calc=0xE8)
-PMBus RX cmd=0x78 (STATUS_BYTE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x78],[0x74],
-PMBus TX cmd=0x78 (STATUS_BYTE) proto=4 (READ_BYTE) len=2 raw=80 71 | PEC OK | PEC(tx=0x71, calc=0x71)
 PMBus RX cmd=0x79 (STATUS_WORD) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x79],[0x73],
 PMBus TX cmd=0x79 (STATUS_WORD) proto=5 (READ_WORD) len=3 raw=80 00 46 | PEC OK | PEC(tx=0x46, calc=0x46)
-PMBus RX cmd=0x7A (STATUS_VOUT) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x7A],[0x7A],
-PMBus TX cmd=0x7A (STATUS_VOUT) proto=4 (READ_BYTE) len=2 raw=00 2E | PEC OK | PEC(tx=0x2E, calc=0x2E)
 PMBus RX cmd=0x7B (STATUS_IOUT) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x7B],[0x7D],
-PMBus TX cmd=0x7B (STATUS_IOUT) proto=4 (READ_BYTE) len=2 raw=00 45 | PEC OK | PEC(tx=0x45, calc=0x45)
+PMBus RX cmd=0x7C (STATUS_INPUT) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0x7C],[0x68],
+PMBus TX cmd=0x7C (STATUS_INPUT) proto=4 (READ_BYTE) len=2 raw=00 53 | PEC OK | PEC(tx=0x53, calc=0x53)
 PMBus RX cmd=0x7D (STATUS_TEMPERATURE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x7D],[0x6F],
 PMBus TX cmd=0x7D (STATUS_TEMPERATURE) proto=4 (READ_BYTE) len=2 raw=00 38 | PEC OK | PEC(tx=0x38, calc=0x38)
 PMBus RX cmd=0x7E (STATUS_CML) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x7E],[0x66],
-PMBus TX cmd=0x7E (STATUS_CML) proto=4 (READ_BYTE) len=2 raw=00 85 | PEC OK | PEC(tx=0x85, calc=0x85)
-PMBus RX cmd=0x7F (STATUS_OTHER) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x7F],[0x61],
-PMBus TX cmd=0x7F (STATUS_OTHER) proto=4 (READ_BYTE) len=2 raw=00 EE | PEC OK | PEC(tx=0xEE, calc=0xEE)
 PMBus RX cmd=0x80 (STATUS_MFR_SPECIFIC) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x80],[0x92],
 PMBus TX cmd=0x80 (STATUS_MFR_SPECIFIC) proto=4 (READ_BYTE) len=2 raw=00 C5 | PEC OK | PEC(tx=0xC5, calc=0xC5)
-PMBus RX cmd=0x81 (STATUS_FANS_1_2) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x81],[0x95],
-PMBus TX cmd=0x81 (STATUS_FANS_1_2) proto=4 (READ_BYTE) len=2 raw=00 AE | PEC OK | PEC(tx=0xAE, calc=0xAE)
 PMBus RX cmd=0x98 (PMBUS_REVISION) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x98],[0xDA],
 PMBus TX cmd=0x98 (PMBUS_REVISION) proto=4 (READ_BYTE) len=2 value=0x33 | part1=1.3 | part2=1.3 | PEC OK | PEC(tx=0xAF, calc=0xAF)
 PMBus RX cmd=0x79 (STATUS_WORD) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x79],[0x73],
 PMBus TX cmd=0x79 (STATUS_WORD) proto=5 (READ_WORD) len=3 raw=80 00 46 | PEC OK | PEC(tx=0x46, calc=0x46)
-PMBus RX cmd=0x9A (MFR_MODEL) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
-address=0xB4:[0x9A],[0xD4],
-PMBus TX cmd=0x9A (MFR_MODEL) proto=8 (BLOCK_READ) len=15 value="MFR_MODEL_001" | raw=0D 4D 46 52 5F 4D 4F 44 45 4C 5F 30 30 31 | PEC OK | PEC(tx=0x06, calc=0x06)
 PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x02],[0x15],
 PMBus TX cmd=0x02 (ON_OFF_CONFIG) proto=4 (READ_BYTE) len=2 raw=1A 5E | PEC OK | PEC(tx=0x5E, calc=0x5E)
@@ -153,39 +134,30 @@ PMBus TX cmd=0x88 (READ_VIN) proto=5 (READ_WORD) len=3 value=230.0000 | raw=0xF3
 PMBus RX cmd=0x89 (READ_IIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x89],[0xAD],
 PMBus TX cmd=0x89 (READ_IIN) proto=5 (READ_WORD) len=3 value=1.2500 | raw=0xBA80 | PEC OK | PEC(tx=0x6A, calc=0x6A)
-PMBus RX cmd=0x8B (READ_VOUT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x8B],[0xA3],
-PMBus TX cmd=0x8B (READ_VOUT) proto=5 (READ_WORD) len=3 value=12.0000 | exp=-9 | raw=0x1800 | PEC OK | PEC(tx=0x97, calc=0x97)
 PMBus RX cmd=0x8C (READ_IOUT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x8C],[0xB6],
 PMBus TX cmd=0x8C (READ_IOUT) proto=5 (READ_WORD) len=3 value=18.5000 | raw=0xDA50 | PEC OK | PEC(tx=0xB9, calc=0xB9)
-PMBus RX cmd=0x8D (READ_TEMPERATURE_1) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x8D],[0xB1],
-PMBus TX cmd=0x8D (READ_TEMPERATURE_1) proto=5 (READ_WORD) len=3 value=35.0000 | raw=0xE230 | PEC OK | PEC(tx=0xF2, calc=0xF2)
-PMBus RX cmd=0x8F (READ_TEMPERATURE_3) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x8F],[0xBF],
-PMBus TX cmd=0x8F (READ_TEMPERATURE_3) proto=5 (READ_WORD) len=3 value=50.0000 | raw=0xE320 | PEC OK | PEC(tx=0x8E, calc=0x8E)
+PMBus RX cmd=0x8E (READ_TEMPERATURE_2) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0x8E],[0xB8],
+PMBus TX cmd=0x8E (READ_TEMPERATURE_2) proto=5 (READ_WORD) len=3 value=43.0000 | raw=0xE2B0 | PEC OK | PEC(tx=0x7E, calc=0x7E)
 PMBus RX cmd=0x90 (READ_FAN_SPEED_1) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x90],[0xE2],
 PMBus TX cmd=0x90 (READ_FAN_SPEED_1) proto=5 (READ_WORD) len=3 raw=EE 22 49 | PEC OK | PEC(tx=0x49, calc=0x49)
-PMBus RX cmd=0x91 (READ_FAN_SPEED_2) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x91],[0xE5],
-PMBus TX cmd=0x91 (READ_FAN_SPEED_2) proto=5 (READ_WORD) len=3 raw=E2 22 A3 | PEC OK | PEC(tx=0xA3, calc=0xA3)
-PMBus RX cmd=0x97 (READ_PIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x97],[0xF7],
-PMBus TX cmd=0x97 (READ_PIN) proto=5 (READ_WORD) len=3 value=276.0000 | raw=0xFA28 | PEC OK | PEC(tx=0xBE, calc=0xBE)
+PMBus RX cmd=0x96 (READ_POUT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0x96],[0xF0],
+PMBus TX cmd=0x96 (READ_POUT) proto=5 (READ_WORD) len=3 value=222.0000 | raw=0xF378 | PEC OK | PEC(tx=0x9B, calc=0x9B)
 PMBus RX cmd=0x86 (READ_EIN) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x86],[0x80],
-PMBus TX cmd=0x86 (READ_EIN) proto=8 (BLOCK_READ) len=8 raw=06 0C 0A E9 27 D8 00 79 | PEC OK | PEC(tx=0x79, calc=0x79)
+PMBus TX cmd=0x86 (READ_EIN) proto=8 (BLOCK_READ) len=8 raw=06 78 98 1C 86 1A 00 C6 | PEC OK | PEC(tx=0xC6, calc=0xC6)
 PMBus RX cmd=0x87 (READ_EOUT) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x87],[0x87],
-PMBus TX cmd=0x87 (READ_EOUT) proto=8 (BLOCK_READ) len=8 raw=06 D2 71 BB 27 D8 00 4C | PEC OK | PEC(tx=0x4C, calc=0x4C)
+PMBus TX cmd=0x87 (READ_EOUT) proto=8 (BLOCK_READ) len=8 raw=06 34 00 17 86 1A 00 14 | PEC OK | PEC(tx=0x14, calc=0x14)
 PMBus RX cmd=0x99 (MFR_ID) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x99],[0xDD],
 PMBus TX cmd=0x99 (MFR_ID) proto=8 (BLOCK_READ) len=12 value="MFR_ID_001" | raw=0A 4D 46 52 5F 49 44 5F 30 30 31 | PEC OK | PEC(tx=0x0B, calc=0x0B)
-PMBus RX cmd=0x9B (MFR_REVISION) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
-address=0xB4:[0x9B],[0xD3],
-PMBus TX cmd=0x9B (MFR_REVISION) proto=8 (BLOCK_READ) len=13 value="MFR_REV_001" | raw=0B 4D 46 52 5F 52 45 56 5F 30 30 31 | PEC OK | PEC(tx=0xA9, calc=0xA9)
+PMBus RX cmd=0x9A (MFR_MODEL) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
+address=0xB4:[0x9A],[0xD4],
+PMBus TX cmd=0x9A (MFR_MODEL) proto=8 (BLOCK_READ) len=15 value="MFR_MODEL_001" | raw=0D 4D 46 52 5F 4D 4F 44 45 4C 5F 30 30 31 | PEC OK | PEC(tx=0x06, calc=0x06)
 PMBus RX cmd=0x9E (MFR_SERIAL) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x9E],[0xC8],
 PMBus TX cmd=0x9E (MFR_SERIAL) proto=8 (BLOCK_READ) len=16 value="MFR_SERIAL_001" | raw=0E 4D 46 52 5F 53 45 52 49 41 4C 5F 30 30 31 | PEC OK | PEC(tx=0xFC, calc=0xFC)
@@ -204,23 +176,15 @@ PMBus TX cmd=0x98 (PMBUS_REVISION) proto=4 (READ_BYTE) len=2 value=0x33 | part1=
 PMBus RX cmd=0x00 (PAGE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x00],[0x1B],
 PMBus TX cmd=0x00 (PAGE) proto=4 (READ_BYTE) len=2 raw=00 CE | PEC OK | PEC(tx=0xCE, calc=0xCE)
-PMBus RX cmd=0x00 (PAGE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x00],[0x1B],
-PMBus TX cmd=0x00 (PAGE) proto=4 (READ_BYTE) len=2 raw=00 CE | PEC OK | PEC(tx=0xCE, calc=0xCE)
 PMBus RX cmd=0x01 (OPERATION) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x01],[0x1C],
 PMBus TX cmd=0x01 (OPERATION) proto=4 (READ_BYTE) len=2 raw=80 2C | PEC OK | PEC(tx=0x2C, calc=0x2C)
-PMBus RX cmd=0x01 (OPERATION) raw=3 payload=1 proto=2 rs=0 pec=1 valid=1
-address=0xB4:[0x01],[0x80],[0xDD],
-PMBus write done cmd=0x01 len=1
+PMBus RX cmd=0x01 (OPERATION) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0x01],[0x1C],
+PMBus TX cmd=0x01 (OPERATION) proto=4 (READ_BYTE) len=2 raw=80 2C | PEC OK | PEC(tx=0x2C, calc=0x2C)
 PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x02],[0x15],
 PMBus TX cmd=0x02 (ON_OFF_CONFIG) proto=4 (READ_BYTE) len=2 raw=1A 5E | PEC OK | PEC(tx=0x5E, calc=0x5E)
-PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=3 payload=1 proto=2 rs=0 pec=1 valid=1
-address=0xB4:[0x02],[0x1B],[0x2A],
-PMBus write done cmd=0x02 len=1
-PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x02],[0x15],
 PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x02],[0x15],
 PMBus TX cmd=0x02 (ON_OFF_CONFIG) proto=4 (READ_BYTE) len=2 raw=1A 5E | PEC OK | PEC(tx=0x5E, calc=0x5E)
@@ -230,33 +194,24 @@ PMBus TX cmd=0x3A (FAN_CONFIG_1_2) proto=4 (READ_BYTE) len=2 raw=00 A8 | PEC OK 
 PMBus RX cmd=0x3A (FAN_CONFIG_1_2) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x3A],[0xBD],
 PMBus TX cmd=0x3A (FAN_CONFIG_1_2) proto=4 (READ_BYTE) len=2 raw=01 AF | PEC OK | PEC(tx=0xAF, calc=0xAF)
-PMBus RX cmd=0x20 (VOUT_MODE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x20],[0xFB],
-PMBus TX cmd=0x20 (VOUT_MODE) proto=4 (READ_BYTE) len=2 raw=17 E8 | PEC OK | PEC(tx=0xE8, calc=0xE8)
+PMBus RX cmd=0x3A (FAN_CONFIG_1_2) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0x3A],[0xBD],
+PMBus TX cmd=0x3A (FAN_CONFIG_1_2) proto=4 (READ_BYTE) len=2 raw=00 A8 | PEC OK | PEC(tx=0xA8, calc=0xA8)
 PMBus RX cmd=0x78 (STATUS_BYTE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x78],[0x74],
 PMBus TX cmd=0x78 (STATUS_BYTE) proto=4 (READ_BYTE) len=2 raw=80 71 | PEC OK | PEC(tx=0x71, calc=0x71)
 PMBus RX cmd=0x79 (STATUS_WORD) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x79],[0x73],
 PMBus TX cmd=0x79 (STATUS_WORD) proto=5 (READ_WORD) len=3 raw=80 00 46 | PEC OK | PEC(tx=0x46, calc=0x46)
-PMBus RX cmd=0x7A (STATUS_VOUT) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x7A],[0x7A],
-PMBus TX cmd=0x7A (STATUS_VOUT) proto=4 (READ_BYTE) len=2 raw=00 2E | PEC OK | PEC(tx=0x2E, calc=0x2E)
 PMBus RX cmd=0x7B (STATUS_IOUT) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x7B],[0x7D],
 PMBus TX cmd=0x7B (STATUS_IOUT) proto=4 (READ_BYTE) len=2 raw=00 45 | PEC OK | PEC(tx=0x45, calc=0x45)
 PMBus RX cmd=0x7D (STATUS_TEMPERATURE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x7D],[0x6F],
 PMBus TX cmd=0x7D (STATUS_TEMPERATURE) proto=4 (READ_BYTE) len=2 raw=00 38 | PEC OK | PEC(tx=0x38, calc=0x38)
-PMBus RX cmd=0x7E (STATUS_CML) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x7E],[0x66],
-PMBus TX cmd=0x7E (STATUS_CML) proto=4 (READ_BYTE) len=2 raw=00 85 | PEC OK | PEC(tx=0x85, calc=0x85)
 PMBus RX cmd=0x7F (STATUS_OTHER) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x7F],[0x61],
 PMBus TX cmd=0x7F (STATUS_OTHER) proto=4 (READ_BYTE) len=2 raw=00 EE | PEC OK | PEC(tx=0xEE, calc=0xEE)
-PMBus RX cmd=0x80 (STATUS_MFR_SPECIFIC) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x80],[0x92],
-PMBus TX cmd=0x80 (STATUS_MFR_SPECIFIC) proto=4 (READ_BYTE) len=2 raw=00 C5 | PEC OK | PEC(tx=0xC5, calc=0xC5)
 PMBus RX cmd=0x81 (STATUS_FANS_1_2) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x81],[0x95],
 PMBus TX cmd=0x81 (STATUS_FANS_1_2) proto=4 (READ_BYTE) len=2 raw=00 AE | PEC OK | PEC(tx=0xAE, calc=0xAE)
@@ -266,170 +221,111 @@ PMBus TX cmd=0x89 (READ_IIN) proto=5 (READ_WORD) len=3 value=1.2500 | raw=0xBA80
 PMBus RX cmd=0x8B (READ_VOUT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x8B],[0xA3],
 PMBus TX cmd=0x8B (READ_VOUT) proto=5 (READ_WORD) len=3 value=12.0000 | exp=-9 | raw=0x1800 | PEC OK | PEC(tx=0x97, calc=0x97)
-PMBus RX cmd=0x8C (READ_IOUT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x8C],[0xB6],
-PMBus TX cmd=0x8C (READ_IOUT) proto=5 (READ_WORD) len=3 value=18.5000 | raw=0xDA50 | PEC OK | PEC(tx=0xB9, calc=0xB9)
 PMBus RX cmd=0x8D (READ_TEMPERATURE_1) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x8D],[0xB1],
 PMBus TX cmd=0x8D (READ_TEMPERATURE_1) proto=5 (READ_WORD) len=3 value=35.0000 | raw=0xE230 | PEC OK | PEC(tx=0xF2, calc=0xF2)
 PMBus RX cmd=0x8F (READ_TEMPERATURE_3) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x8F],[0xBF],
 PMBus TX cmd=0x8F (READ_TEMPERATURE_3) proto=5 (READ_WORD) len=3 value=50.0000 | raw=0xE320 | PEC OK | PEC(tx=0x8E, calc=0x8E)
-PMBus RX cmd=0x90 (READ_FAN_SPEED_1) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x90],[0xE2],
-PMBus TX cmd=0x90 (READ_FAN_SPEED_1) proto=5 (READ_WORD) len=3 raw=EE 22 49 | PEC OK | PEC(tx=0x49, calc=0x49)
-PMBus RX cmd=0x91 (READ_FAN_SPEED_2) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x91],[0xE5],
-PMBus TX cmd=0x91 (READ_FAN_SPEED_2) proto=5 (READ_WORD) len=3 raw=E2 22 A3 | PEC OK | PEC(tx=0xA3, calc=0xA3)
 PMBus RX cmd=0x97 (READ_PIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x97],[0xF7],
 PMBus TX cmd=0x97 (READ_PIN) proto=5 (READ_WORD) len=3 value=276.0000 | raw=0xFA28 | PEC OK | PEC(tx=0xBE, calc=0xBE)
 PMBus RX cmd=0x86 (READ_EIN) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x86],[0x80],
-PMBus TX cmd=0x86 (READ_EIN) proto=8 (BLOCK_READ) len=8 raw=06 CC 20 EB 17 DA 00 BD | PEC OK | PEC(tx=0xBD, calc=0xBD)
-PMBus RX cmd=0x87 (READ_EOUT) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
-address=0xB4:[0x87],[0x87],
-PMBus TX cmd=0x87 (READ_EOUT) proto=8 (BLOCK_READ) len=8 raw=06 F2 1F BD 17 DA 00 36 | PEC OK | PEC(tx=0x36, calc=0x36)
+PMBus TX cmd=0x86 (READ_EIN) proto=8 (BLOCK_READ) len=8 raw=06 34 2B 1F E9 1C 00 FA | PEC OK | PEC(tx=0xFA, calc=0xFA)
 PMBus RX cmd=0x99 (MFR_ID) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x99],[0xDD],
 PMBus TX cmd=0x99 (MFR_ID) proto=8 (BLOCK_READ) len=12 value="MFR_ID_001" | raw=0A 4D 46 52 5F 49 44 5F 30 30 31 | PEC OK | PEC(tx=0x0B, calc=0x0B)
 PMBus RX cmd=0x9B (MFR_REVISION) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x9B],[0xD3],
 PMBus TX cmd=0x9B (MFR_REVISION) proto=8 (BLOCK_READ) len=13 value="MFR_REV_001" | raw=0B 4D 46 52 5F 52 45 56 5F 30 30 31 | PEC OK | PEC(tx=0xA9, calc=0xA9)
-PMBus RX cmd=0x9E (MFR_SERIAL) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
-address=0xB4:[0x9E],[0xC8],
-PMBus TX cmd=0x9E (MFR_SERIAL) proto=8 (BLOCK_READ) len=16 value="MFR_SERIAL_001" | raw=0E 4D 46 52 5F 53 45 52 49 41 4C 5F 30 30 31 | PEC OK | PEC(tx=0xFC, calc=0xFC)
+PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0x02],[0x15],
+PMBus TX cmd=0x02 (ON_OFF_CONFIG) proto=4 (READ_BYTE) len=2 raw=1A 5E | PEC OK | PEC(tx=0x5E, calc=0x5E)
 PMBus RX cmd=0x19 (CAPABILITY) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x19],[0x54],
 PMBus TX cmd=0x19 (CAPABILITY) proto=4 (READ_BYTE) len=2 raw=80 DF | PEC OK | PEC(tx=0xDF, calc=0xDF)
-PMBus RX cmd=0x20 (VOUT_MODE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x20],[0xFB],
-PMBus TX cmd=0x20 (VOUT_MODE) proto=4 (READ_BYTE) len=2 raw=17 E8 | PEC OK | PEC(tx=0xE8, calc=0xE8)
-PMBus RX cmd=0x22 (VOUT_TRIM) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x22],[0xF5],
+PMBus RX cmd=0x21 (VOUT_COMMAND) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0x21],[0xFC],
+PMBus TX cmd=0x21 (VOUT_COMMAND) proto=5 (READ_WORD) len=3 raw=00 18 F4 | PEC OK | PEC(tx=0xF4, calc=0xF4)
 PMBus RX cmd=0x23 (VOUT_CAL_OFFSET) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x23],[0xF2],
 PMBus TX cmd=0x23 (VOUT_CAL_OFFSET) proto=5 (READ_WORD) len=3 raw=00 00 90 | PEC OK | PEC(tx=0x90, calc=0x90)
-PMBus RX cmd=0x24 (VOUT_MAX) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x24],[0xE7],
-PMBus TX cmd=0x24 (VOUT_MAX) proto=5 (READ_WORD) len=3 raw=66 1A 3F | PEC OK | PEC(tx=0x3F, calc=0x3F)
 PMBus RX cmd=0x25 (VOUT_MARGIN_HIGH) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x25],[0xE0],
 PMBus TX cmd=0x25 (VOUT_MARGIN_HIGH) proto=5 (READ_WORD) len=3 raw=33 19 6D | PEC OK | PEC(tx=0x6D, calc=0x6D)
-PMBus RX cmd=0x26 (VOUT_MARGIN_LOW) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x26],[0xE9],
-PMBus TX cmd=0x26 (VOUT_MARGIN_LOW) proto=5 (READ_WORD) len=3 raw=CD 16 B8 | PEC OK | PEC(tx=0xB8, calc=0xB8)
 PMBus RX cmd=0x27 (VOUT_TRANSITION_RATE) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x27],[0xEE],
 PMBus TX cmd=0x27 (VOUT_TRANSITION_RATE) proto=5 (READ_WORD) len=3 raw=00 00 C8 | PEC OK | PEC(tx=0xC8, calc=0xC8)
-PMBus RX cmd=0x28 (VOUT_DROOP) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x28],[0xC3],
-PMBus TX cmd=0x28 (VOUT_DROOP) proto=5 (READ_WORD) len=3 raw=00 00 1A | PEC OK | PEC(tx=0x1A, calc=0x1A)
+PMBus RX cmd=0x29 (VOUT_SCALE_LOOP) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0x29],[0xC4],
+PMBus TX cmd=0x29 (VOUT_SCALE_LOOP) proto=5 (READ_WORD) len=3 raw=00 00 0C | PEC OK | PEC(tx=0x0C, calc=0x0C)
 PMBus RX cmd=0x2A (VOUT_SCALE_MONITOR) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x2A],[0xCD],
 PMBus TX cmd=0x2A (VOUT_SCALE_MONITOR) proto=5 (READ_WORD) len=3 raw=00 00 36 | PEC OK | PEC(tx=0x36, calc=0x36)
 PMBus RX cmd=0x2B (VOUT_MIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x2B],[0xCA],
 PMBus TX cmd=0x2B (VOUT_MIN) proto=5 (READ_WORD) len=3 raw=9A 15 28 | PEC OK | PEC(tx=0x28, calc=0x28)
-PMBus RX cmd=0x31 (POUT_MAX) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x31],[0x8C],
-PMBus TX cmd=0x31 (POUT_MAX) proto=5 (READ_WORD) len=3 raw=58 FA 97 | PEC OK | PEC(tx=0x97, calc=0x97)
-PMBus RX cmd=0x32 (MAX_DUTY) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x32],[0x85],
-PMBus TX cmd=0x32 (MAX_DUTY) proto=5 (READ_WORD) len=3 raw=20 EB D0 | PEC OK | PEC(tx=0xD0, calc=0xD0)
 PMBus RX cmd=0x33 (FREQUENCY_SWITCH) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x33],[0x82],
 PMBus TX cmd=0x33 (FREQUENCY_SWITCH) proto=5 (READ_WORD) len=3 raw=0D 3B BF | PEC OK | PEC(tx=0xBF, calc=0xBF)
 PMBus RX cmd=0x35 (VIN_ON) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x35],[0x90],
 PMBus TX cmd=0x35 (VIN_ON) proto=5 (READ_WORD) len=3 raw=D0 F2 E9 | PEC OK | PEC(tx=0xE9, calc=0xE9)
-PMBus RX cmd=0x36 (VIN_OFF) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x36],[0x99],
-PMBus TX cmd=0x36 (VIN_OFF) proto=5 (READ_WORD) len=3 raw=A8 F2 D9 | PEC OK | PEC(tx=0xD9, calc=0xD9)
 PMBus RX cmd=0x37 (INTERLEAVE) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x37],[0x9E],
 PMBus TX cmd=0x37 (INTERLEAVE) proto=5 (READ_WORD) len=3 raw=00 00 AF | PEC OK | PEC(tx=0xAF, calc=0xAF)
-PMBus RX cmd=0x38 (IOUT_CAL_GAIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x38],[0xB3],
-PMBus TX cmd=0x38 (IOUT_CAL_GAIN) proto=5 (READ_WORD) len=3 raw=00 00 7D | PEC OK | PEC(tx=0x7D, calc=0x7D)
 PMBus RX cmd=0x39 (IOUT_CAL_OFFSET) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x39],[0xB4],
 PMBus TX cmd=0x39 (IOUT_CAL_OFFSET) proto=5 (READ_WORD) len=3 raw=00 00 6B | PEC OK | PEC(tx=0x6B, calc=0x6B)
 PMBus RX cmd=0x3B (FAN_COMMAND_1) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x3B],[0xBA],
 PMBus TX cmd=0x3B (FAN_COMMAND_1) proto=5 (READ_WORD) len=3 raw=EE 22 3C | PEC OK | PEC(tx=0x3C, calc=0x3C)
-PMBus RX cmd=0x3C (FAN_COMMAND_2) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x3C],[0xAF],
-PMBus TX cmd=0x3C (FAN_COMMAND_2) proto=5 (READ_WORD) len=3 raw=E2 22 A2 | PEC OK | PEC(tx=0xA2, calc=0xA2)
 PMBus RX cmd=0x3D (FAN_CONFIG_3_4) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x3D],[0xA8],
 PMBus TX cmd=0x3D (FAN_CONFIG_3_4) proto=4 (READ_BYTE) len=2 raw=00 BE | PEC OK | PEC(tx=0xBE, calc=0xBE)
 PMBus RX cmd=0x3E (FAN_COMMAND_3) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x3E],[0xA1],
 PMBus TX cmd=0x3E (FAN_COMMAND_3) proto=5 (READ_WORD) len=3 raw=00 00 09 | PEC OK | PEC(tx=0x09, calc=0x09)
-PMBus RX cmd=0x3F (FAN_COMMAND_4) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x3F],[0xA6],
-PMBus TX cmd=0x3F (FAN_COMMAND_4) proto=5 (READ_WORD) len=3 raw=00 00 1F | PEC OK | PEC(tx=0x1F, calc=0x1F)
-PMBus RX cmd=0x41 (VOUT_OV_FAULT_RESPONSE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x41],[0xDB],
-PMBus TX cmd=0x41 (VOUT_OV_FAULT_RESPONSE) proto=4 (READ_BYTE) len=2 raw=00 23 | PEC OK | PEC(tx=0x23, calc=0x23)
+PMBus RX cmd=0x40 (VOUT_OV_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0x40],[0xDC],
+PMBus TX cmd=0x40 (VOUT_OV_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=66 1A 32 | PEC OK | PEC(tx=0x32, calc=0x32)
 PMBus RX cmd=0x42 (VOUT_OV_WARN_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x42],[0xD2],
 PMBus TX cmd=0x42 (VOUT_OV_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=33 19 5A | PEC OK | PEC(tx=0x5A, calc=0x5A)
-PMBus RX cmd=0x43 (VOUT_UV_WARN_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x43],[0xD5],
-PMBus TX cmd=0x43 (VOUT_UV_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=CD 16 A3 | PEC OK | PEC(tx=0xA3, calc=0xA3)
 PMBus RX cmd=0x44 (VOUT_UV_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x44],[0xC0],
 PMBus TX cmd=0x44 (VOUT_UV_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=9A 15 AF | PEC OK | PEC(tx=0xAF, calc=0xAF)
 PMBus RX cmd=0x46 (IOUT_OC_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x46],[0xCE],
 PMBus TX cmd=0x46 (IOUT_OC_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=20 DB 2A | PEC OK | PEC(tx=0x2A, calc=0x2A)
-PMBus RX cmd=0x47 (IOUT_OC_FAULT_RESPONSE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x47],[0xC9],
-PMBus TX cmd=0x47 (IOUT_OC_FAULT_RESPONSE) proto=4 (READ_BYTE) len=2 raw=00 5E | PEC OK | PEC(tx=0x5E, calc=0x5E)
 PMBus RX cmd=0x48 (IOUT_OC_LV_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x48],[0xE4],
 PMBus TX cmd=0x48 (IOUT_OC_LV_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=00 BA 60 | PEC OK | PEC(tx=0x60, calc=0x60)
 PMBus RX cmd=0x4A (IOUT_OC_WARN_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x4A],[0xEA],
 PMBus TX cmd=0x4A (IOUT_OC_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=C0 DA 86 | PEC OK | PEC(tx=0x86, calc=0x86)
-PMBus RX cmd=0x4B (IOUT_UC_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x4B],[0xED],
-PMBus TX cmd=0x4B (IOUT_UC_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=00 00 75 | PEC OK | PEC(tx=0x75, calc=0x75)
 PMBus RX cmd=0x4C (IOUT_UC_FAULT_RESPONSE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x4C],[0xF8],
 PMBus TX cmd=0x4C (IOUT_UC_FAULT_RESPONSE) proto=4 (READ_BYTE) len=2 raw=00 B2 | PEC OK | PEC(tx=0xB2, calc=0xB2)
-PMBus RX cmd=0x4F (OT_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x4F],[0xF1],
-PMBus TX cmd=0x4F (OT_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=20 EB 1C | PEC OK | PEC(tx=0x1C, calc=0x1C)
-PMBus RX cmd=0x51 (OT_WARN_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x51],[0xAB],
-PMBus TX cmd=0x51 (OT_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=D0 EA AC | PEC OK | PEC(tx=0xAC, calc=0xAC)
+PMBus RX cmd=0x50 (OT_FAULT_RESPONSE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0x50],[0xAC],
+PMBus TX cmd=0x50 (OT_FAULT_RESPONSE) proto=4 (READ_BYTE) len=2 raw=00 EA | PEC OK | PEC(tx=0xEA, calc=0xEA)
 PMBus RX cmd=0x52 (UT_WARN_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x52],[0xA2],
 PMBus TX cmd=0x52 (UT_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=00 80 3D | PEC OK | PEC(tx=0x3D, calc=0x3D)
-PMBus RX cmd=0x53 (UT_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x53],[0xA5],
-PMBus TX cmd=0x53 (UT_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=80 D5 31 | PEC OK | PEC(tx=0x31, calc=0x31)
 PMBus RX cmd=0x54 (UT_FAULT_RESPONSE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x54],[0xB0],
 PMBus TX cmd=0x54 (UT_FAULT_RESPONSE) proto=4 (READ_BYTE) len=2 raw=00 41 | PEC OK | PEC(tx=0x41, calc=0x41)
 PMBus RX cmd=0x56 (VIN_OV_FAULT_RESPONSE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x56],[0xBE],
 PMBus TX cmd=0x56 (VIN_OV_FAULT_RESPONSE) proto=4 (READ_BYTE) len=2 raw=00 97 | PEC OK | PEC(tx=0x97, calc=0x97)
-PMBus RX cmd=0x57 (VIN_OV_WARN_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x57],[0xB9],
-PMBus TX cmd=0x57 (VIN_OV_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=E8 F3 C6 | PEC OK | PEC(tx=0xC6, calc=0xC6)
 PMBus RX cmd=0x58 (VIN_UV_WARN_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x58],[0x94],
 PMBus TX cmd=0x58 (VIN_UV_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=D0 F2 42 | PEC OK | PEC(tx=0x42, calc=0x42)
-PMBus RX cmd=0x59 (VIN_UV_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x59],[0x93],
-PMBus TX cmd=0x59 (VIN_UV_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=A8 F2 5E | PEC OK | PEC(tx=0x5E, calc=0x5E)
-PMBus RX cmd=0x5B (IIN_OC_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x5B],[0x9D],
-PMBus TX cmd=0x5B (IIN_OC_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=00 C3 55 | PEC OK | PEC(tx=0x55, calc=0x55)
+PMBus RX cmd=0x5A (VIN_UV_FAULT_RESPONSE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0x5A],[0x9A],
+PMBus TX cmd=0x5A (VIN_UV_FAULT_RESPONSE) proto=4 (READ_BYTE) len=2 raw=00 6D | PEC OK | PEC(tx=0x6D, calc=0x6D)
 PMBus RX cmd=0x5C (IIN_OC_FAULT_RESPONSE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x5C],[0x88],
 PMBus TX cmd=0x5C (IIN_OC_FAULT_RESPONSE) proto=4 (READ_BYTE) len=2 raw=00 10 | PEC OK | PEC(tx=0x10, calc=0x10)
@@ -439,78 +335,51 @@ PMBus TX cmd=0x5D (IIN_OC_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=80 C2 90 | P
 PMBus RX cmd=0x5F (POWER_GOOD_OFF) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x5F],[0x81],
 PMBus TX cmd=0x5F (POWER_GOOD_OFF) proto=5 (READ_WORD) len=3 raw=00 14 26 | PEC OK | PEC(tx=0x26, calc=0x26)
-PMBus RX cmd=0x60 (TON_DELAY) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x60],[0x3C],
-PMBus TX cmd=0x60 (TON_DELAY) proto=5 (READ_WORD) len=3 raw=20 EB 00 | PEC OK | PEC(tx=0x00, calc=0x00)
 PMBus RX cmd=0x61 (TON_RISE) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x61],[0x3B],
 PMBus TX cmd=0x61 (TON_RISE) proto=5 (READ_WORD) len=3 raw=20 F3 5E | PEC OK | PEC(tx=0x5E, calc=0x5E)
-PMBus RX cmd=0x62 (TON_MAX_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x62],[0x32],
-PMBus TX cmd=0x62 (TON_MAX_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=E8 FB 19 | PEC OK | PEC(tx=0x19, calc=0x19)
 PMBus RX cmd=0x63 (TON_MAX_FAULT_RESPONSE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x63],[0x35],
 PMBus TX cmd=0x63 (TON_MAX_FAULT_RESPONSE) proto=4 (READ_BYTE) len=2 raw=00 B6 | PEC OK | PEC(tx=0xB6, calc=0xB6)
 PMBus RX cmd=0x65 (TOFF_FALL) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x65],[0x27],
 PMBus TX cmd=0x65 (TOFF_FALL) proto=5 (READ_WORD) len=3 raw=20 F3 06 | PEC OK | PEC(tx=0x06, calc=0x06)
-PMBus RX cmd=0x66 (TOFF_MAX_WARN_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x66],[0x2E],
-PMBus TX cmd=0x66 (TOFF_MAX_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=E8 FB 41 | PEC OK | PEC(tx=0x41, calc=0x41)
 PMBus RX cmd=0x68 (POUT_OP_FAULT_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x68],[0x04],
 PMBus TX cmd=0x68 (POUT_OP_FAULT_LIMIT) proto=5 (READ_WORD) len=3 raw=80 FA DF | PEC OK | PEC(tx=0xDF, calc=0xDF)
-PMBus RX cmd=0x69 (POUT_OP_FAULT_RESPONSE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x69],[0x03],
-PMBus TX cmd=0x69 (POUT_OP_FAULT_RESPONSE) proto=4 (READ_BYTE) len=2 raw=00 31 | PEC OK | PEC(tx=0x31, calc=0x31)
-PMBus RX cmd=0x6B (PIN_OP_WARN_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x6B],[0x0D],
-PMBus TX cmd=0x6B (PIN_OP_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=94 FA E6 | PEC OK | PEC(tx=0xE6, calc=0xE6)
+PMBus RX cmd=0x6A (POUT_OP_WARN_LIMIT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0x6A],[0x0A],
+PMBus TX cmd=0x6A (POUT_OP_WARN_LIMIT) proto=5 (READ_WORD) len=3 raw=58 FA E1 | PEC OK | PEC(tx=0xE1, calc=0xE1)
 PMBus RX cmd=0x78 (STATUS_BYTE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x78],[0x74],
 PMBus TX cmd=0x78 (STATUS_BYTE) proto=4 (READ_BYTE) len=2 raw=80 71 | PEC OK | PEC(tx=0x71, calc=0x71)
-PMBus RX cmd=0x79 (STATUS_WORD) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x79],[0x73],
-PMBus TX cmd=0x79 (STATUS_WORD) proto=5 (READ_WORD) len=3 raw=80 00 46 | PEC OK | PEC(tx=0x46, calc=0x46)
+PMBus RX cmd=0x7A (STATUS_VOUT) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0x7A],[0x7A],
+PMBus TX cmd=0x7A (STATUS_VOUT) proto=4 (READ_BYTE) len=2 raw=00 2E | PEC OK | PEC(tx=0x2E, calc=0x2E)
 PMBus RX cmd=0x7B (STATUS_IOUT) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x7B],[0x7D],
 PMBus TX cmd=0x7B (STATUS_IOUT) proto=4 (READ_BYTE) len=2 raw=00 45 | PEC OK | PEC(tx=0x45, calc=0x45)
-PMBus RX cmd=0x7C (STATUS_INPUT) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x7C],[0x68],
-PMBus TX cmd=0x7C (STATUS_INPUT) proto=4 (READ_BYTE) len=2 raw=00 53 | PEC OK | PEC(tx=0x53, calc=0x53)
 PMBus RX cmd=0x7D (STATUS_TEMPERATURE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x7D],[0x6F],
 PMBus TX cmd=0x7D (STATUS_TEMPERATURE) proto=4 (READ_BYTE) len=2 raw=00 38 | PEC OK | PEC(tx=0x38, calc=0x38)
-PMBus RX cmd=0x7E (STATUS_CML) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x7E],[0x66],
-PMBus TX cmd=0x7E (STATUS_CML) proto=4 (READ_BYTE) len=2 raw=00 85 | PEC OK | PEC(tx=0x85, calc=0x85)
 PMBus RX cmd=0x7F (STATUS_OTHER) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x7F],[0x61],
 PMBus TX cmd=0x7F (STATUS_OTHER) proto=4 (READ_BYTE) len=2 raw=00 EE | PEC OK | PEC(tx=0xEE, calc=0xEE)
-PMBus RX cmd=0x80 (STATUS_MFR_SPECIFIC) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x80],[0x92],
-PMBus TX cmd=0x80 (STATUS_MFR_SPECIFIC) proto=4 (READ_BYTE) len=2 raw=00 C5 | PEC OK | PEC(tx=0xC5, calc=0xC5)
-PMBus RX cmd=0x82 (STATUS_FANS_3_4) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x82],[0x9C],
-PMBus TX cmd=0x82 (STATUS_FANS_3_4) proto=4 (READ_BYTE) len=2 raw=00 13 | PEC OK | PEC(tx=0x13, calc=0x13)
+PMBus RX cmd=0x81 (STATUS_FANS_1_2) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0x81],[0x95],
+PMBus TX cmd=0x81 (STATUS_FANS_1_2) proto=4 (READ_BYTE) len=2 raw=00 AE | PEC OK | PEC(tx=0xAE, calc=0xAE)
 PMBus RX cmd=0x83 (READ_KWH_IN) raw=2 payload=0 proto=6 rs=1 pec=1 valid=1
 address=0xB4:[0x83],[0x9B],
 PMBus TX cmd=0x83 (READ_KWH_IN) proto=6 (READ_DWORD) len=5 raw=00 00 00 00 36 | PEC OK | PEC(tx=0x36, calc=0x36)
-PMBus RX cmd=0x84 (READ_KWH_OUT) raw=2 payload=0 proto=6 rs=1 pec=1 valid=1
-address=0xB4:[0x84],[0x8E],
-PMBus TX cmd=0x84 (READ_KWH_OUT) proto=6 (READ_DWORD) len=5 raw=00 00 00 00 E9 | PEC OK | PEC(tx=0xE9, calc=0xE9)
 PMBus RX cmd=0x85 (READ_KWH_CONFIG) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x85],[0x89],
 PMBus TX cmd=0x85 (READ_KWH_CONFIG) proto=5 (READ_WORD) len=3 raw=00 00 1B | PEC OK | PEC(tx=0x1B, calc=0x1B)
 PMBus RX cmd=0x87 (READ_EOUT) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x87],[0x87],
-PMBus TX cmd=0x87 (READ_EOUT) proto=8 (BLOCK_READ) len=8 raw=06 AE 21 BD 19 DA 00 1D | PEC OK | PEC(tx=0x1D, calc=0x1D)
+PMBus TX cmd=0x87 (READ_EOUT) proto=8 (BLOCK_READ) len=8 raw=06 0E 12 19 E9 1C 00 62 | PEC OK | PEC(tx=0x62, calc=0x62)
 PMBus RX cmd=0x88 (READ_VIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x88],[0xAA],
 PMBus TX cmd=0x88 (READ_VIN) proto=5 (READ_WORD) len=3 value=230.0000 | raw=0xF398 | PEC OK | PEC(tx=0x7B, calc=0x7B)
-PMBus RX cmd=0x89 (READ_IIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x89],[0xAD],
-PMBus TX cmd=0x89 (READ_IIN) proto=5 (READ_WORD) len=3 value=1.2500 | raw=0xBA80 | PEC OK | PEC(tx=0x6A, calc=0x6A)
 PMBus RX cmd=0x8A (READ_VCAP) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x8A],[0xA4],
 PMBus TX cmd=0x8A (READ_VCAP) proto=5 (READ_WORD) len=3 raw=98 F3 57 | PEC OK | PEC(tx=0x57, calc=0x57)
@@ -520,27 +389,20 @@ PMBus TX cmd=0x8C (READ_IOUT) proto=5 (READ_WORD) len=3 value=18.5000 | raw=0xDA
 PMBus RX cmd=0x8D (READ_TEMPERATURE_1) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x8D],[0xB1],
 PMBus TX cmd=0x8D (READ_TEMPERATURE_1) proto=5 (READ_WORD) len=3 value=35.0000 | raw=0xE230 | PEC OK | PEC(tx=0xF2, calc=0xF2)
-PMBus RX cmd=0x8E (READ_TEMPERATURE_2) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x8E],[0xB8],
-PMBus TX cmd=0x8E (READ_TEMPERATURE_2) proto=5 (READ_WORD) len=3 value=43.0000 | raw=0xE2B0 | PEC OK | PEC(tx=0x7E, calc=0x7E)
-PMBus RX cmd=0x90 (READ_FAN_SPEED_1) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x90],[0xE2],
-PMBus TX cmd=0x90 (READ_FAN_SPEED_1) proto=5 (READ_WORD) len=3 raw=EE 22 49 | PEC OK | PEC(tx=0x49, calc=0x49)
+PMBus RX cmd=0x8F (READ_TEMPERATURE_3) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0x8F],[0xBF],
 PMBus RX cmd=0x91 (READ_FAN_SPEED_2) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x91],[0xE5],
 PMBus TX cmd=0x91 (READ_FAN_SPEED_2) proto=5 (READ_WORD) len=3 raw=E2 22 A3 | PEC OK | PEC(tx=0xA3, calc=0xA3)
 PMBus RX cmd=0x92 (READ_FAN_SPEED_3) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x92],[0xEC],
 PMBus TX cmd=0x92 (READ_FAN_SPEED_3) proto=5 (READ_WORD) len=3 raw=00 00 1E | PEC OK | PEC(tx=0x1E, calc=0x1E)
-PMBus RX cmd=0x93 (READ_FAN_SPEED_4) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x93],[0xEB],
-PMBus TX cmd=0x93 (READ_FAN_SPEED_4) proto=5 (READ_WORD) len=3 raw=00 00 08 | PEC OK | PEC(tx=0x08, calc=0x08)
+PMBus RX cmd=0x94 (READ_DUTY_CYCLE) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0x94],[0xFE],
+PMBus TX cmd=0x94 (READ_DUTY_CYCLE) proto=5 (READ_WORD) len=3 raw=00 00 6A | PEC OK | PEC(tx=0x6A, calc=0x6A)
 PMBus RX cmd=0x95 (READ_FREQUENCY) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x95],[0xF9],
 PMBus TX cmd=0x95 (READ_FREQUENCY) proto=5 (READ_WORD) len=3 raw=0D 3B 34 | PEC OK | PEC(tx=0x34, calc=0x34)
-PMBus RX cmd=0x96 (READ_POUT) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x96],[0xF0],
-PMBus TX cmd=0x96 (READ_POUT) proto=5 (READ_WORD) len=3 value=222.0000 | raw=0xF378 | PEC OK | PEC(tx=0x9B, calc=0x9B)
 PMBus RX cmd=0x97 (READ_PIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x97],[0xF7],
 PMBus TX cmd=0x97 (READ_PIN) proto=5 (READ_WORD) len=3 value=276.0000 | raw=0xFA28 | PEC OK | PEC(tx=0xBE, calc=0xBE)
@@ -550,24 +412,24 @@ PMBus TX cmd=0x99 (MFR_ID) proto=8 (BLOCK_READ) len=12 value="MFR_ID_001" | raw=
 PMBus RX cmd=0x9A (MFR_MODEL) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x9A],[0xD4],
 PMBus TX cmd=0x9A (MFR_MODEL) proto=8 (BLOCK_READ) len=15 value="MFR_MODEL_001" | raw=0D 4D 46 52 5F 4D 4F 44 45 4C 5F 30 30 31 | PEC OK | PEC(tx=0x06, calc=0x06)
-PMBus RX cmd=0x9B (MFR_REVISION) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
-address=0xB4:[0x9B],[0xD3],
-PMBus TX cmd=0x9B (MFR_REVISION) proto=8 (BLOCK_READ) len=13 value="MFR_REV_001" | raw=0B 4D 46 52 5F 52 45 56 5F 30 30 31 | PEC OK | PEC(tx=0xA9, calc=0xA9)
+PMBus RX cmd=0x9C (MFR_LOCATION) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
+address=0xB4:[0x9C],[0xC6],
+PMBus TX cmd=0x9C (MFR_LOCATION) proto=8 (BLOCK_READ) len=18 raw=10 4D 46 52 5F 4C 4F 43 41 54 49 4F 4E 5F 30 30 31 A1 | PEC OK | PEC(tx=0xA1, calc=0xA1)
 PMBus RX cmd=0x9D (MFR_DATE) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x9D],[0xC1],
 PMBus TX cmd=0x9D (MFR_DATE) proto=8 (BLOCK_READ) len=12 raw=0A 32 30 32 36 2D 30 36 2D 31 34 22 | PEC OK | PEC(tx=0x22, calc=0x22)
 PMBus RX cmd=0x9E (MFR_SERIAL) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0x9E],[0xC8],
 PMBus TX cmd=0x9E (MFR_SERIAL) proto=8 (BLOCK_READ) len=16 value="MFR_SERIAL_001" | raw=0E 4D 46 52 5F 53 45 52 49 41 4C 5F 30 30 31 | PEC OK | PEC(tx=0xFC, calc=0xFC)
-PMBus RX cmd=0xA0 (MFR_VIN_MIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0xA0],[0x72],
-PMBus TX cmd=0xA0 (MFR_VIN_MIN) proto=5 (READ_WORD) len=3 raw=D0 F2 F1 | PEC OK | PEC(tx=0xF1, calc=0xF1)
+PMBus RX cmd=0x9F (APP_PROFILE_SUPPORT) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
+address=0xB4:[0x9F],[0xCF],
+PMBus TX cmd=0x9F (APP_PROFILE_SUPPORT) proto=8 (BLOCK_READ) len=4 raw=02 01 13 14 | PEC OK | PEC(tx=0x14, calc=0x14)
 PMBus RX cmd=0xA1 (MFR_VIN_MAX) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0xA1],[0x75],
 PMBus TX cmd=0xA1 (MFR_VIN_MAX) proto=5 (READ_WORD) len=3 raw=10 FA 32 | PEC OK | PEC(tx=0x32, calc=0x32)
-PMBus RX cmd=0xA2 (MFR_IIN_MAX) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0xA2],[0x7C],
-PMBus TX cmd=0xA2 (MFR_IIN_MAX) proto=5 (READ_WORD) len=3 raw=00 C3 F0 | PEC OK | PEC(tx=0xF0, calc=0xF0)
+PMBus RX cmd=0xA3 (MFR_PIN_MAX) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0xA3],[0x7B],
+PMBus TX cmd=0xA3 (MFR_PIN_MAX) proto=5 (READ_WORD) len=3 raw=94 FA FC | PEC OK | PEC(tx=0xFC, calc=0xFC)
 PMBus RX cmd=0xA4 (MFR_VOUT_MIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0xA4],[0x6E],
 PMBus TX cmd=0xA4 (MFR_VOUT_MIN) proto=5 (READ_WORD) len=3 raw=9A 15 CB | PEC OK | PEC(tx=0xCB, calc=0xCB)
@@ -577,109 +439,95 @@ PMBus TX cmd=0xA5 (MFR_VOUT_MAX) proto=5 (READ_WORD) len=3 raw=66 1A 18 | PEC OK
 PMBus RX cmd=0xA6 (MFR_IOUT_MAX) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0xA6],[0x60],
 PMBus TX cmd=0xA6 (MFR_IOUT_MAX) proto=5 (READ_WORD) len=3 raw=20 DB 4E | PEC OK | PEC(tx=0x4E, calc=0x4E)
-PMBus RX cmd=0xA7 (MFR_POUT_MAX) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0xA7],[0x67],
-PMBus TX cmd=0xA7 (MFR_POUT_MAX) proto=5 (READ_WORD) len=3 raw=58 FA B5 | PEC OK | PEC(tx=0xB5, calc=0xB5)
+PMBus RX cmd=0xA8 (MFR_TAMBIENT_MAX) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0xA8],[0x4A],
+PMBus TX cmd=0xA8 (MFR_TAMBIENT_MAX) proto=5 (READ_WORD) len=3 raw=20 EB 1A | PEC OK | PEC(tx=0x1A, calc=0x1A)
 PMBus RX cmd=0xA9 (MFR_TAMBIENT_MIN) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0xA9],[0x4D],
 PMBus TX cmd=0xA9 (MFR_TAMBIENT_MIN) proto=5 (READ_WORD) len=3 raw=80 D5 AE | PEC OK | PEC(tx=0xAE, calc=0xAE)
-PMBus RX cmd=0xAA (MFR_EFFICIENCY_LL) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
-address=0xB4:[0xAA],[0x44],
-PMBus TX cmd=0xAA (MFR_EFFICIENCY_LL) proto=8 (BLOCK_READ) len=8 raw=06 14 5A 32 5C 64 5D 96 | PEC OK | PEC(tx=0x96, calc=0x96)
 PMBus RX cmd=0xAB (MFR_EFFICIENCY_HL) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0xAB],[0x43],
 PMBus TX cmd=0xAB (MFR_EFFICIENCY_HL) proto=8 (BLOCK_READ) len=8 raw=06 14 5C 32 5E 64 60 C1 | PEC OK | PEC(tx=0xC1, calc=0xC1)
-PMBus RX cmd=0xAD (IC_DEVICE_ID) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
-address=0xB4:[0xAD],[0x51],
-PMBus TX cmd=0xAD (IC_DEVICE_ID) proto=8 (BLOCK_READ) len=12 raw=0A 4D 30 33 31 5F 50 4D 42 55 53 86 | PEC OK | PEC(tx=0x86, calc=0x86)
+PMBus RX cmd=0xAC (MFR_PIN_ACCURACY) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0xAC],[0x56],
+PMBus TX cmd=0xAC (MFR_PIN_ACCURACY) proto=4 (READ_BYTE) len=2 raw=32 E2 | PEC OK | PEC(tx=0xE2, calc=0xE2)
 PMBus RX cmd=0xAE (IC_DEVICE_REV) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0xAE],[0x58],
 PMBus TX cmd=0xAE (IC_DEVICE_REV) proto=8 (BLOCK_READ) len=9 raw=07 52 45 56 5F 30 30 31 C5 | PEC OK | PEC(tx=0xC5, calc=0xC5)
-PMBus RX cmd=0xC0 (MFR_MAX_TEMP_1) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0xC0],[0x55],
-PMBus TX cmd=0xC0 (MFR_MAX_TEMP_1) proto=5 (READ_WORD) len=3 raw=30 E2 97 | PEC OK | PEC(tx=0x97, calc=0x97)
-PMBus RX cmd=0xC2 (MFR_MAX_TEMP_3) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0xC2],[0x5B],
-PMBus TX cmd=0xC2 (MFR_MAX_TEMP_3) proto=5 (READ_WORD) len=3 raw=20 E3 EB | PEC OK | PEC(tx=0xEB, calc=0xEB)
+PMBus RX cmd=0xC1 (MFR_MAX_TEMP_2) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
+address=0xB4:[0xC1],[0x52],
+PMBus TX cmd=0xC1 (MFR_MAX_TEMP_2) proto=5 (READ_WORD) len=3 raw=B0 E2 37 | PEC OK | PEC(tx=0x37, calc=0x37)
 PMBus RX cmd=0xB0 (USER_DATA_00) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0xB0],[0x02],
 PMBus TX cmd=0xB0 (USER_DATA_00) proto=8 (BLOCK_READ) len=3 raw=01 B0 F0 | PEC OK | PEC(tx=0xF0, calc=0xF0)
 PMBus RX cmd=0xBF (USER_DATA_15) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0xBF],[0x2F],
 PMBus TX cmd=0xBF (USER_DATA_15) proto=8 (BLOCK_READ) len=3 raw=01 BF 0F | PEC OK | PEC(tx=0x0F, calc=0x0F)
+PMBus RX cmd=0xC4 (MFR_SPECIFIC_C4) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
+address=0xB4:[0xC4],[0x49],
+PMBus TX cmd=0xC4 (MFR_SPECIFIC_C4) proto=8 (BLOCK_READ) len=3 raw=01 C4 D1 | PEC OK | PEC(tx=0xD1, calc=0xD1)
 PMBus RX cmd=0xD0 (MFR_COLD_REDUNDANCY_CONFIG) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0xD0],[0x25],
 PMBus TX cmd=0xD0 (MFR_COLD_REDUNDANCY_CONFIG) proto=4 (READ_BYTE) len=2 raw=00 E1 | PEC OK | PEC(tx=0xE1, calc=0xE1)
-PMBus RX cmd=0xD6 (MFR_FWUPLOAD_MODE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0xD6],[0x37],
-PMBus TX cmd=0xD6 (MFR_FWUPLOAD_MODE) proto=4 (READ_BYTE) len=2 raw=00 9C | PEC OK | PEC(tx=0x9C, calc=0x9C)
 PMBus RX cmd=0xD8 (MFR_FWUPLOAD_STATUS) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0xD8],[0x1D],
 PMBus TX cmd=0xD8 (MFR_FWUPLOAD_STATUS) proto=5 (READ_WORD) len=3 raw=00 00 19 | PEC OK | PEC(tx=0x19, calc=0x19)
 PMBus RX cmd=0xDC (MFR_BLACKBOX) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0xDC],[0x01],
 PMBus TX cmd=0xDC (MFR_BLACKBOX) proto=8 (BLOCK_READ) len=34 raw=20 02 82 82 00 00 00 00 00 20 00 98 F3 00 18 50 DA 30 E2 B0 E2 20 E3 EE 22 E2 22 28 FA 78 F3 C4 00 BA | PEC OK | PEC(tx=0xBA, calc=0xBA)
+PMBus RX cmd=0xFD (MFR_SPECIFIC_FD) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
+address=0xB4:[0xFD],[0xE6],
+PMBus TX cmd=0xFD (MFR_SPECIFIC_FD) proto=8 (BLOCK_READ) len=3 raw=01 FD 71 | PEC OK | PEC(tx=0x71, calc=0x71)
 PMBus RX cmd=0x21 (VOUT_COMMAND) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x21],[0xFC],
 PMBus TX cmd=0x21 (VOUT_COMMAND) proto=5 (READ_WORD) len=3 raw=00 18 F4 | PEC OK | PEC(tx=0xF4, calc=0xF4)
 PMBus RX cmd=0x21 (VOUT_COMMAND) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x21],[0xFC],
 PMBus TX cmd=0x21 (VOUT_COMMAND) proto=5 (READ_WORD) len=3 raw=01 18 E1 | PEC OK | PEC(tx=0xE1, calc=0xE1)
-PMBus RX cmd=0x21 (VOUT_COMMAND) raw=4 payload=2 proto=3 rs=0 pec=1 valid=1
-address=0xB4:[0x21],[0x00],[0x18],[0xA0],
-PMBus write done cmd=0x21 len=2
-PMBus RX cmd=0x21 (VOUT_COMMAND) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
-address=0xB4:[0x21],[0xFC],
-PMBus TX cmd=0x21 (VOUT_COMMAND) proto=5 (READ_WORD) len=3 raw=00 18 F4 | PEC OK | PEC(tx=0xF4, calc=0xF4)
 PMBus RX cmd=0xB0 (USER_DATA_00) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0xB0],[0x02],
 PMBus TX cmd=0xB0 (USER_DATA_00) proto=8 (BLOCK_READ) len=3 raw=01 B0 F0 | PEC OK | PEC(tx=0xF0, calc=0xF0)
+PMBus RX cmd=0xB0 (USER_DATA_00) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
+address=0xB4:[0xB0],[0x02],
+PMBus TX cmd=0xB0 (USER_DATA_00) proto=8 (BLOCK_READ) len=8 raw=06 55 AA 10 20 30 40 02 | PEC OK | PEC(tx=0x02, calc=0x02)
 PMBus RX cmd=0xB0 (USER_DATA_00) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
 address=0xB4:[0xB0],[0x02],
 PMBus TX cmd=0xB0 (USER_DATA_00) proto=8 (BLOCK_READ) len=3 raw=01 B0 F0 | PEC OK | PEC(tx=0xF0, calc=0xF0)
 PMBus RX cmd=0x00 (PAGE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x00],[0x1B],
 PMBus TX cmd=0x00 (PAGE) proto=4 (READ_BYTE) len=2 raw=00 CE | PEC OK | PEC(tx=0xCE, calc=0xCE)
-PMBus RX cmd=0x04 (PHASE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x04],[0x07],
-PMBus TX cmd=0x04 (PHASE) proto=4 (READ_BYTE) len=2 raw=00 65 | PEC OK | PEC(tx=0x65, calc=0x65)
 PMBus RX cmd=0x00 (PAGE) raw=3 payload=1 proto=2 rs=0 pec=1 valid=1
 address=0xB4:[0x00],[0x00],[0x41],
 PMBus write done cmd=0x00 len=1
-PMBus RX cmd=0x04 (PHASE) raw=3 payload=1 proto=2 rs=0 pec=1 valid=1
-address=0xB4:[0x04],[0x01],[0x12],
 PMBus RX cmd=0x00 (PAGE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x00],[0x1B],
 PMBus TX cmd=0x00 (PAGE) proto=4 (READ_BYTE) len=2 raw=00 CE | PEC OK | PEC(tx=0xCE, calc=0xCE)
 PMBus RX cmd=0x04 (PHASE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x04],[0x07],
 PMBus TX cmd=0x04 (PHASE) proto=4 (READ_BYTE) len=2 raw=01 62 | PEC OK | PEC(tx=0x62, calc=0x62)
+PMBus RX cmd=0x04 (PHASE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
+address=0xB4:[0x04],[0x07],
+PMBus TX cmd=0x04 (PHASE) proto=4 (READ_BYTE) len=2 raw=00 65 | PEC OK | PEC(tx=0x65, calc=0x65)
 PMBus RX cmd=0x00 (PAGE) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x00],[0x1B],
 PMBus TX cmd=0x00 (PAGE) proto=4 (READ_BYTE) len=2 raw=00 CE | PEC OK | PEC(tx=0xCE, calc=0xCE)
-PMBus RX cmd=0x98 (PMBUS_REVISION) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
-address=0xB4:[0x98],[0xDA],
-PMBus TX cmd=0x98 (PMBUS_REVISION) proto=4 (READ_BYTE) len=2 value=0x33 | part1=1.3 | part2=1.3 | PEC OK | PEC(tx=0xAF, calc=0xAF)
 PMBus RX cmd=0x79 (STATUS_WORD) raw=2 payload=0 proto=5 rs=1 pec=1 valid=1
 address=0xB4:[0x79],[0x73],
 PMBus TX cmd=0x79 (STATUS_WORD) proto=5 (READ_WORD) len=3 raw=80 00 46 | PEC OK | PEC(tx=0x46, calc=0x46)
-PMBus RX cmd=0x9A (MFR_MODEL) raw=2 payload=0 proto=8 rs=1 pec=1 valid=1
-address=0xB4:[0x9A],[0xD4],
-PMBus TX cmd=0x9A (MFR_MODEL) proto=8 (BLOCK_READ) len=15 value="MFR_MODEL_001" | raw=0D 4D 46 52 5F 4D 4F 44 45 4C 5F 30 30 31 | PEC OK | PEC(tx=0x06, calc=0x06)
 PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x02],[0x15],
 PMBus TX cmd=0x02 (ON_OFF_CONFIG) proto=4 (READ_BYTE) len=2 raw=1A 5E | PEC OK | PEC(tx=0x5E, calc=0x5E)
+PMBus RX cmd=0x03 (CLEAR_FAULTS) raw=2 payload=0 proto=1 rs=0 pec=1 valid=1
+address=0xB4:[0x03],[0x12],
 PMBus RX cmd=0x02 (ON_OFF_CONFIG) raw=3 payload=1 proto=2 rs=0 pec=1 valid=0
 address=0xB4:[0x02],[0x1A],[0xD2],
 PMBus PEC error cmd=0x02 frame=3
-PMBus ARA alias addr7=0x0C state=1
 PMBus RX cmd=0x7E (STATUS_CML) raw=2 payload=0 proto=4 rs=1 pec=1 valid=1
 address=0xB4:[0x7E],[0x66],
 PMBus TX cmd=0x7E (STATUS_CML) proto=4 (READ_BYTE) len=2 raw=20 65 | PEC OK | PEC(tx=0x65, calc=0x65)
 PMBus RX cmd=0x03 (CLEAR_FAULTS) raw=2 payload=0 proto=1 rs=0 pec=1 valid=1
 address=0xB4:[0x03],[0x12],
 PMBus write done cmd=0x03 len=0
-PMBus ARA alias addr7=0x5A state=0
 PMBus RX cmd=0x03 (CLEAR_FAULTS) raw=2 payload=0 proto=1 rs=0 pec=1 valid=1
 address=0xB4:[0x03],[0x12],
 PMBus write done cmd=0x03 len=0
@@ -706,7 +554,6 @@ PMBus TX cmd=0x7E (STATUS_CML) proto=4 (READ_BYTE) len=2 raw=40 42 | PEC OK | PE
 PMBus ARA alias addr7=0x0C state=1
 PMBus RX cmd=0x03 (CLEAR_FAULTS) raw=2 payload=0 proto=1 rs=0 pec=1 valid=1
 address=0xB4:[0x03],[0x12],
-PMBus write done cmd=0x03 len=0
 PMBus RX cmd=0x03 (CLEAR_FAULTS) raw=2 payload=0 proto=1 rs=0 pec=1 valid=1
 address=0xB4:[0x03],[0x12],
 PMBus write done cmd=0x03 len=0

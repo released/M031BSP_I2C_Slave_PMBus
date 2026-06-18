@@ -5,6 +5,7 @@
 #include "pmbus_app.h"
 #include "pmbus_io.h"
 #include "pmbus_pec.h"
+#include "pmbus_protocol.h"
 
 extern uint32_t get_tick(void);
 
@@ -1810,6 +1811,7 @@ void pmbus_drv_init(void)
 
     pmbus_io_init_i2c_pins();
     pmbus_io_init_alert_pin();
+    pmbus_pec_init();
 
     pmbus_app_init();
     pmbus_app_set_busy_state(1U);

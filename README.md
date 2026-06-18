@@ -235,10 +235,13 @@ Primary configuration points:
 
 ```text
 SampleCode/Template/board_config.h
-SampleCode/Template/pmbus/pmbus_cfg_common.h
+SampleCode/Template/pmbus/pmbus_cfg_user.h
+SampleCode/Template/pmbus/pmbus_protocol.h
 ```
 
-`pmbus_cfg_common.h` holds portable PMBus protocol settings shared by M031, MS51, and future ports.
+`pmbus_cfg_user.h` holds portable PMBus user settings shared by M031, MS51, and future ports. Change this file for profile selection, command groups, PEC policy/backend, address aliases, debug output, and recovery thresholds.
+
+`pmbus_protocol.h` holds fixed protocol constants such as `PMBUS_STATUS_*`, firmware-upload status bits, blackbox size, and `PMBUS_I2C_STATUS_*` ISR state codes. These values are used by the framework and should not be treated as user-configurable settings.
 
 | Define | Default | Purpose |
 | --- | --- | --- |
@@ -297,8 +300,11 @@ PEC and debug settings:
 | `PMBUS_PEC_POLICY_DISABLED` | `0U` | Disables PEC generation/validation. |
 | `PMBUS_PEC_POLICY_OPTIONAL` | `1U` | Accepts transactions with or without PEC, validates PEC when present, and appends read PEC for repeated-START reads. |
 | `PMBUS_PEC_POLICY_REQUIRED` | `2U` | Requires PEC for write-side transactions. |
-| `PMBUS_PEC_POLICY` | `PMBUS_PEC_POLICY_OPTIONAL` | Active PEC policy. |
-| `PMBUS_ENABLE_PEC` | Derived | Non-zero when `PMBUS_PEC_POLICY` is not disabled. |
+| `PMBUS_PEC_POLICY` | `PMBUS_PEC_POLICY_OPTIONAL` | Active PEC policy. PEC is enabled by default; use `PMBUS_PEC_POLICY_DISABLED` only for explicit bring-up tests. |
+| `PMBUS_ENABLE_PEC` | Derived, enabled by default | Non-zero when `PMBUS_PEC_POLICY` is not disabled. |
+| `PMBUS_PEC_BACKEND_SOFTWARE` | `0U` | Uses the portable bitwise CRC-8 implementation. |
+| `PMBUS_PEC_BACKEND_HW_CRC` | `1U` | Uses the platform hardware CRC peripheral registers/macros in CRC-8 mode. No StdDriver `crc.c` link dependency is required on M031. |
+| `PMBUS_PEC_BACKEND` | `PMBUS_PEC_BACKEND_HW_CRC` | Selects the PEC CRC backend. The hardware backend keeps the same byte-by-byte update API by loading the current PEC as the hardware seed. |
 | `PMBUS_DEBUG_ENABLE` | `1U` | Enables queued background debug output. |
 | `PMBUS_DEBUG_PRINT_RX_FRAME` | `1U` | Prints decoded RX frames and raw RX bytes for LA comparison. |
 | `PMBUS_DEBUG_PRINT_TX_READY` | `1U` | Prints prepared TX frames. |
@@ -355,6 +361,17 @@ The `address=0xB4` field is the 8-bit write address observed by the logic analyz
 [SLV write address],[command byte],...[PEC]
 ```
 
+PEC CRC backend selection is independent from PEC policy. `PMBUS_PEC_POLICY` decides whether PEC is disabled, optional, or required. `PMBUS_PEC_BACKEND` only decides whether the CRC-8 math uses software or the platform hardware CRC peripheral. The hardware backend protects each byte update with a short interrupt-disabled section because the CRC peripheral is shared global state.
+
+Use `PMBUS_PEC_POLICY_OPTIONAL` when the host is not forced to send PEC. This mode is useful for bring-up tools, LA comparison, and compatibility tests because incoming PEC is validated when present while non-PEC transactions remain accepted. Use `PMBUS_PEC_POLICY_REQUIRED` when the host must use PEC; write-side transactions without valid PEC are rejected and reported through CML status.
+
+To switch PEC CRC implementation, set `PMBUS_PEC_BACKEND` in `pmbus_cfg_user.h`:
+
+```c
+#define PMBUS_PEC_BACKEND PMBUS_PEC_BACKEND_SOFTWARE
+#define PMBUS_PEC_BACKEND PMBUS_PEC_BACKEND_HW_CRC
+```
+
 ![log 1](log_1.jpg)
 
 ![log 2](log_2.jpg)
@@ -383,7 +400,7 @@ Pico HID Test Tool repository: docs/PMBUS_TABLE31_GAP_MATRIX.md
 
 | Date | Change |
 | --- | --- |
-| 2026/06/18 | Documented PMBus profile, command-group, PEC/debug, alias/recovery, and platform porting defines; updated PMBus transaction and alias/recovery flow charts. |
+| 2026/06/18 | Documented PMBus profile, command-group, PEC policy/backend, debug, alias/recovery, and platform porting defines; updated PMBus transaction and alias/recovery flow charts. |
 | 2026/06/14 | Initial GitHub README draft created from MCU README template. |
 
 ## Mermaid Flow Charts

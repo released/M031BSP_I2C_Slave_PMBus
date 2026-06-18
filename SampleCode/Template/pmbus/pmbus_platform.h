@@ -1,6 +1,8 @@
 #ifndef PMBUS_PLATFORM_H
 #define PMBUS_PLATFORM_H
 
+#include "pmbus_protocol.h"
+
 void pmbus_platform_init(void);
 void pmbus_platform_background_task(void);
 

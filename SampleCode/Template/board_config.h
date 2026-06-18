@@ -1,7 +1,7 @@
 #ifndef BOARD_CONFIG_H
 #define BOARD_CONFIG_H
 
-#include "pmbus/pmbus_cfg_common.h"
+#include "pmbus/pmbus_cfg_user.h"
 
 /*
     Default M031 board mapping for the PMBus framework.

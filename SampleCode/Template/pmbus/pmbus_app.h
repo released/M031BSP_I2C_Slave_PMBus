@@ -2,6 +2,7 @@
 #define PMBUS_APP_H
 #include "pmbus_types.h"
 #include "board_config.h"
+#include "pmbus_protocol.h"
 
 typedef struct
 {

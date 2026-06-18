@@ -16,6 +16,12 @@
     Contract expectations:
     - All functions must be non-blocking.
     - pmbus_io_i2c_get_status() must return the current slave status code.
+    - pmbus_io_i2c_get_received_address() should return the matched 7-bit
+      slave address for the current SLA+W/SLA+R event when the MCU exposes it.
+      If the platform cannot report it, return the primary PMBus address.
+    - pmbus_io_i2c_slave_set_alias() must configure optional secondary slave
+      address slots for ARA, ARP, and Zone aliases. Pass
+      PMBUS_I2C_ALIAS_SLOT_DISABLED when a platform has no free slot.
     - pmbus_io_i2c_set_ack() and pmbus_io_i2c_clear_ack() must only control
       the next ACK/NACK response state.
     - pmbus_io_i2c_timeout_flag() and pmbus_io_i2c_clear_timeout_flag() must
@@ -57,6 +63,7 @@ void pmbus_io_alert_assert(void);
 void pmbus_io_alert_release(void);
 
 void pmbus_io_i2c_slave_open(unsigned char slave_address);
+void pmbus_io_i2c_slave_set_alias(unsigned char slot, unsigned char address_7bit, unsigned char enable_state);
 void pmbus_io_i2c_interrupt(unsigned char enable_state);
 void pmbus_io_i2c_timeout(unsigned char enable_state);
 void pmbus_io_i2c_clear_timeout_flag(void);
@@ -64,6 +71,7 @@ void pmbus_io_i2c_si_check(void);
 void pmbus_io_i2c_disable(void);
 unsigned char pmbus_io_i2c_get_status(void);
 unsigned char pmbus_io_i2c_timeout_flag(void);
+unsigned char pmbus_io_i2c_get_received_address(void);
 void pmbus_io_i2c_enable_timeout_counter(void);
 void pmbus_io_i2c_disable_timeout_counter(void);
 void pmbus_io_i2c_bus_error_reset(void);

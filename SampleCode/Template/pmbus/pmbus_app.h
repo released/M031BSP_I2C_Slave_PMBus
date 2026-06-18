@@ -1,6 +1,7 @@
 #ifndef PMBUS_APP_H
 #define PMBUS_APP_H
 #include "pmbus_types.h"
+#include "board_config.h"
 
 typedef struct
 {
@@ -86,6 +87,7 @@ void pmbus_app_set_phase(unsigned char value);
 unsigned char pmbus_app_get_write_protect(void);
 void pmbus_app_set_write_protect(unsigned char value);
 
+#if PMBUS_ENABLE_CMD_FAN
 unsigned char pmbus_app_get_fan_config_1_2(void);
 void pmbus_app_set_fan_config_1_2(unsigned char value);
 uint16_t pmbus_app_get_fan_command_1(void);
@@ -98,6 +100,7 @@ uint16_t pmbus_app_get_fan_command_3(void);
 void pmbus_app_set_fan_command_3(uint16_t value);
 uint16_t pmbus_app_get_fan_command_4(void);
 void pmbus_app_set_fan_command_4(uint16_t value);
+#endif
 
 unsigned char pmbus_app_get_vout_mode(void);
 void pmbus_app_set_vout_mode(unsigned char value);
@@ -245,8 +248,10 @@ unsigned char pmbus_app_get_status_other(void);
 unsigned char pmbus_app_get_status_mfr_specific(void);
 unsigned char pmbus_app_get_status_fans_1_2(void);
 
+#if PMBUS_ENABLE_CMD_ENERGY
 unsigned char pmbus_app_get_read_ein(unsigned char **data_ptr);
 unsigned char pmbus_app_get_read_eout(unsigned char **data_ptr);
+#endif
 uint16_t pmbus_app_get_read_vin(void);
 uint16_t pmbus_app_get_read_iin(void);
 uint16_t pmbus_app_get_read_vout(void);
@@ -254,8 +259,10 @@ uint16_t pmbus_app_get_read_iout(void);
 uint16_t pmbus_app_get_read_temperature_1(void);
 uint16_t pmbus_app_get_read_temperature_2(void);
 uint16_t pmbus_app_get_read_temperature_3(void);
+#if PMBUS_ENABLE_CMD_FAN
 uint16_t pmbus_app_get_read_fan_speed_1(void);
 uint16_t pmbus_app_get_read_fan_speed_2(void);
+#endif
 uint16_t pmbus_app_get_read_pout(void);
 uint16_t pmbus_app_get_read_pin(void);
 unsigned char pmbus_app_get_pmbus_revision(void);
@@ -264,13 +271,17 @@ unsigned char pmbus_app_get_mfr_id(unsigned char **data_ptr);
 unsigned char pmbus_app_get_mfr_model(unsigned char **data_ptr);
 unsigned char pmbus_app_get_mfr_revision(unsigned char **data_ptr);
 unsigned char pmbus_app_get_mfr_serial(unsigned char **data_ptr);
+#if PMBUS_ENABLE_CMD_MFR_EXT
 unsigned char pmbus_app_get_mfr_blackbox(unsigned char **data_ptr);
 unsigned char pmbus_app_get_mfr_cold_redundancy_config(void);
 void pmbus_app_set_mfr_cold_redundancy_config(unsigned char value);
+#endif
+#if PMBUS_ENABLE_CMD_FWUPLOAD
 unsigned char pmbus_app_get_mfr_fwupload_mode(void);
 void pmbus_app_set_mfr_fwupload_mode(unsigned char value);
 uint16_t pmbus_app_get_mfr_fwupload_status(void);
 unsigned char pmbus_app_store_mfr_fwupload_block(unsigned char *data_ptr, unsigned char length);
+#endif
 
 unsigned char pmbus_app_is_alert_asserted(void);
 void pmbus_app_assert_alert(void);

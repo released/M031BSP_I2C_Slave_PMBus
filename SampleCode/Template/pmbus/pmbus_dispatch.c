@@ -11,11 +11,30 @@ typedef enum
     PMBUS_RESP_BLOCK
 } pmbus_dispatch_response_kind_t;
 
+#define PMBUS_CMD_FLAG_SEND_BYTE              0x01U
+#define PMBUS_CMD_FLAG_WRITE_BYTE             0x02U
+#define PMBUS_CMD_FLAG_WRITE_WORD             0x04U
+#define PMBUS_CMD_FLAG_BLOCK_WRITE            0x08U
+#define PMBUS_CMD_FLAG_BLOCK_WRITE_READ       0x10U
+#define PMBUS_CMD_FLAG_PROCESS_CALL           0x20U
+
+#define PMBUS_DESC(cmd, kind, caps, fmt)      { (cmd), (kind), (caps), (fmt) }
+
+typedef struct
+{
+    uint8_t command;
+    uint8_t read_kind;
+    uint8_t flags;
+    uint8_t query_data_format;
+} pmbus_command_descriptor_t;
+
 static uint8_t pmbus_dispatch_is_write_byte_supported(uint8_t command);
 static uint8_t pmbus_dispatch_is_write_word_supported(uint8_t command);
 static uint8_t pmbus_dispatch_is_send_byte_supported(uint8_t command);
 static uint8_t pmbus_dispatch_is_block_write_supported(uint8_t command);
 static uint8_t pmbus_dispatch_is_block_write_read_process_call_supported(uint8_t command);
+static const pmbus_command_descriptor_t *pmbus_dispatch_find_command_descriptor(uint8_t command);
+static uint8_t pmbus_dispatch_command_has_flag(uint8_t command, uint8_t flag);
 static uint8_t pmbus_dispatch_is_user_data_command(uint8_t command);
 static uint8_t pmbus_dispatch_is_mfr_policy_block_command(uint8_t command);
 static uint8_t pmbus_dispatch_is_policy_block_command(uint8_t command);
@@ -33,11 +52,14 @@ static uint8_t pmbus_dispatch_build_coefficients_response(uint8_t *payload, uint
 static uint8_t pmbus_dispatch_build_page_plus_read_response(uint8_t *payload, uint8_t data_len, uint8_t *tx_buffer, uint8_t *tx_length);
 static uint8_t pmbus_dispatch_build_byte_response(uint8_t command, uint8_t *tx_buffer, uint8_t *tx_length);
 static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_buffer, uint8_t *tx_length);
+#if PMBUS_ENABLE_CMD_ENERGY
 static uint8_t pmbus_dispatch_build_dword_response(uint8_t command, uint8_t *tx_buffer, uint8_t *tx_length);
+#endif
 static uint8_t pmbus_dispatch_build_block_response(uint8_t command, uint8_t *tx_buffer, uint8_t *tx_length);
 
 /* P2 Table 31 read-only placeholders.
    TODO: Bind these to SKU EEPROM, production data, and real CRPS platform measurements. */
+#if PMBUS_ENABLE_CMD_MFR_EXT
 static uint8_t g_pmbus_dispatch_mfr_location[] = "MFR_LOCATION_001";
 static uint8_t g_pmbus_dispatch_mfr_date[] = "2026-06-14";
 static uint8_t g_pmbus_dispatch_app_profile[] = { 0x01U, 0x13U };
@@ -45,6 +67,7 @@ static uint8_t g_pmbus_dispatch_efficiency_ll[] = { 0x14U, 0x5AU, 0x32U, 0x5CU, 
 static uint8_t g_pmbus_dispatch_efficiency_hl[] = { 0x14U, 0x5CU, 0x32U, 0x5EU, 0x64U, 0x60U };
 static uint8_t g_pmbus_dispatch_ic_device_id[] = "M031_PMBUS";
 static uint8_t g_pmbus_dispatch_ic_device_rev[] = "REV_001";
+#endif
 
 #define PMBUS_DISPATCH_POLICY_BLOCK_SIZE      16U
 #define PMBUS_DISPATCH_USER_DATA_COUNT        16U
@@ -53,6 +76,7 @@ static uint8_t g_pmbus_dispatch_ic_device_rev[] = "REV_001";
 /* CRPS policy namespace:
    USER_DATA and unassigned MFR_SPECIFIC commands are volatile bounded block shadows.
    TODO: bind each product-owned entry to NVM, telemetry, or control logic before final CRPS release. */
+#if PMBUS_ENABLE_CMD_POLICY
 static uint8_t g_pmbus_dispatch_user_policy_lengths[PMBUS_DISPATCH_USER_DATA_COUNT];
 static uint8_t g_pmbus_dispatch_user_policy_data[PMBUS_DISPATCH_USER_DATA_COUNT][PMBUS_DISPATCH_POLICY_BLOCK_SIZE];
 static uint8_t g_pmbus_dispatch_mfr_policy_lengths[PMBUS_DISPATCH_MFR_POLICY_COUNT];
@@ -61,6 +85,207 @@ static uint8_t g_pmbus_dispatch_extended_selector;
 static uint8_t g_pmbus_dispatch_extended_command;
 static uint8_t g_pmbus_dispatch_extended_length;
 static uint8_t g_pmbus_dispatch_extended_data[PMBUS_DISPATCH_POLICY_BLOCK_SIZE];
+#endif
+static pmbus_command_descriptor_t g_pmbus_dispatch_dynamic_descriptor;
+
+static const pmbus_command_descriptor_t g_pmbus_command_descriptors[] =
+{
+#if PMBUS_ENABLE_CMD_CORE
+    PMBUS_DESC(PMBUS_COMMAND_PAGE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_OPERATION, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_ON_OFF_CONFIG, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_CLEAR_FAULTS, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_SEND_BYTE, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_PHASE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+#endif
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
+    PMBUS_DESC(PMBUS_COMMAND_PAGE_PLUS_WRITE, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_BLOCK_WRITE, 0x06U),
+    PMBUS_DESC(PMBUS_COMMAND_PAGE_PLUS_READ, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_BLOCK_WRITE_READ, 0x06U),
+#endif
+#if PMBUS_ENABLE_CMD_ZONE
+    PMBUS_DESC(PMBUS_COMMAND_ZONE_CONFIG, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_ZONE_ACTIVE, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x07U),
+#endif
+#if PMBUS_ENABLE_CMD_CORE
+    PMBUS_DESC(PMBUS_COMMAND_WRITE_PROTECT, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STORE_DEFAULT_ALL, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_SEND_BYTE, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_RESTORE_DEFAULT_ALL, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_SEND_BYTE, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_STORE_DEFAULT_CODE, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_RESTORE_DEFAULT_CODE, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STORE_USER_ALL, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_SEND_BYTE, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_RESTORE_USER_ALL, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_SEND_BYTE, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_STORE_USER_CODE, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_RESTORE_USER_CODE, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_CAPABILITY, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_QUERY, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_BLOCK_WRITE_READ, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_SMBALERT_MASK, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_WRITE_WORD | PMBUS_CMD_FLAG_BLOCK_WRITE_READ, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_MODE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_COMMAND, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD | PMBUS_CMD_FLAG_PROCESS_CALL, 0x00U),
+#endif
+#if PMBUS_ENABLE_CMD_LIMITS
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_TRIM, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_CAL_OFFSET, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_MAX, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_MARGIN_HIGH, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_MARGIN_LOW, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_TRANSITION_RATE, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_DROOP, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_SCALE_LOOP, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_SCALE_MONITOR, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_MIN, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+#endif
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
+    PMBUS_DESC(PMBUS_COMMAND_COEFFICIENTS, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_BLOCK_WRITE_READ, 0x06U),
+#endif
+#if PMBUS_ENABLE_CMD_LIMITS
+    PMBUS_DESC(PMBUS_COMMAND_POUT_MAX, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MAX_DUTY, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_FREQUENCY_SWITCH, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+#endif
+#if PMBUS_ENABLE_CMD_CORE
+    PMBUS_DESC(PMBUS_COMMAND_POWER_MODE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+#endif
+#if PMBUS_ENABLE_CMD_LIMITS
+    PMBUS_DESC(PMBUS_COMMAND_VIN_ON, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VIN_OFF, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_INTERLEAVE, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_IOUT_CAL_GAIN, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_IOUT_CAL_OFFSET, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+#endif
+#if PMBUS_ENABLE_CMD_FAN
+    PMBUS_DESC(PMBUS_COMMAND_FAN_CONFIG_1_2, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_FAN_COMMAND_1, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_FAN_COMMAND_2, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_FAN_CONFIG_3_4, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_FAN_COMMAND_3, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_FAN_COMMAND_4, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+#endif
+#if PMBUS_ENABLE_CMD_LIMITS
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_OV_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_OV_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_OV_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_UV_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_UV_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VOUT_UV_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_IOUT_OC_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_IOUT_OC_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_IOUT_OC_LV_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_IOUT_OC_LV_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_IOUT_OC_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_IOUT_UC_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_IOUT_UC_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_OT_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_OT_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_OT_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_UT_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_UT_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_UT_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_VIN_OV_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VIN_OV_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_VIN_OV_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VIN_UV_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VIN_UV_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_VIN_UV_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_IIN_OC_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_IIN_OC_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_IIN_OC_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_POWER_GOOD_ON, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_POWER_GOOD_OFF, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_TON_DELAY, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_TON_RISE, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_TON_MAX_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_TON_MAX_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_TOFF_DELAY, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_TOFF_FALL, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_TOFF_MAX_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_POUT_OP_FAULT_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_POUT_OP_FAULT_RESPONSE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_POUT_OP_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_PIN_OP_WARN_LIMIT, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+#endif
+#if PMBUS_ENABLE_CMD_STATUS
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_BYTE, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_WORD, PMBUS_RESP_WORD, 0U, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_VOUT, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_IOUT, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_INPUT, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_TEMPERATURE, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_CML, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_OTHER, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_MFR_SPECIFIC, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_FANS_1_2, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_STATUS_FANS_3_4, PMBUS_RESP_BYTE, 0U, 0x04U),
+#endif
+#if PMBUS_ENABLE_CMD_ENERGY
+    PMBUS_DESC(PMBUS_COMMAND_READ_KWH_IN, PMBUS_RESP_DWORD, 0U, 0x03U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_KWH_OUT, PMBUS_RESP_DWORD, 0U, 0x03U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_KWH_CONFIG, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_EIN, PMBUS_RESP_BLOCK, 0U, 0x06U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_EOUT, PMBUS_RESP_BLOCK, 0U, 0x06U),
+#endif
+#if PMBUS_ENABLE_CMD_TELEMETRY
+    PMBUS_DESC(PMBUS_COMMAND_READ_VIN, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_IIN, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_VCAP, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_VOUT, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_IOUT, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_TEMPERATURE_1, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_TEMPERATURE_2, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_TEMPERATURE_3, PMBUS_RESP_WORD, 0U, 0x00U),
+#endif
+#if PMBUS_ENABLE_CMD_FAN
+    PMBUS_DESC(PMBUS_COMMAND_READ_FAN_SPEED_1, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_FAN_SPEED_2, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_FAN_SPEED_3, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_FAN_SPEED_4, PMBUS_RESP_WORD, 0U, 0x00U),
+#endif
+#if PMBUS_ENABLE_CMD_TELEMETRY
+    PMBUS_DESC(PMBUS_COMMAND_READ_DUTY_CYCLE, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_FREQUENCY, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_POUT, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_READ_PIN, PMBUS_RESP_WORD, 0U, 0x00U),
+#endif
+#if PMBUS_ENABLE_CMD_CORE
+    PMBUS_DESC(PMBUS_COMMAND_PMBUS_REVISION, PMBUS_RESP_BYTE, 0U, 0x04U),
+#endif
+#if PMBUS_ENABLE_CMD_MFR_BASIC
+    PMBUS_DESC(PMBUS_COMMAND_MFR_ID, PMBUS_RESP_BLOCK, 0U, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_MODEL, PMBUS_RESP_BLOCK, 0U, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_REVISION, PMBUS_RESP_BLOCK, 0U, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_SERIAL, PMBUS_RESP_BLOCK, 0U, 0x07U),
+#endif
+#if PMBUS_ENABLE_CMD_MFR_EXT
+    PMBUS_DESC(PMBUS_COMMAND_MFR_LOCATION, PMBUS_RESP_BLOCK, 0U, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_DATE, PMBUS_RESP_BLOCK, 0U, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_APP_PROFILE_SUPPORT, PMBUS_RESP_BLOCK, 0U, 0x06U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_VIN_MIN, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_VIN_MAX, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_IIN_MAX, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_PIN_MAX, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_VOUT_MIN, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_VOUT_MAX, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_IOUT_MAX, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_POUT_MAX, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_TAMBIENT_MAX, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_TAMBIENT_MIN, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_EFFICIENCY_LL, PMBUS_RESP_BLOCK, 0U, 0x06U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_EFFICIENCY_HL, PMBUS_RESP_BLOCK, 0U, 0x06U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_PIN_ACCURACY, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_IC_DEVICE_ID, PMBUS_RESP_BLOCK, 0U, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_IC_DEVICE_REV, PMBUS_RESP_BLOCK, 0U, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_MAX_TEMP_1, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_MAX_TEMP_2, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_MAX_TEMP_3, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+#endif
+#if PMBUS_ENABLE_CMD_FWUPLOAD
+    PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD_MODE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_BLOCK_WRITE, 0x06U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD_STATUS, PMBUS_RESP_WORD, 0U, 0x07U),
+#endif
+#if PMBUS_ENABLE_CMD_MFR_EXT
+    PMBUS_DESC(PMBUS_COMMAND_MFR_BLACKBOX, PMBUS_RESP_BLOCK, 0U, 0x06U)
+#endif
+};
 
 static void pmbus_dispatch_store_word(uint8_t *buffer, uint16_t value)
 {
@@ -68,12 +293,69 @@ static void pmbus_dispatch_store_word(uint8_t *buffer, uint16_t value)
     buffer[1] = (uint8_t)((value >> 8) & 0x00FFU);
 }
 
+#if PMBUS_ENABLE_CMD_ENERGY
 static void pmbus_dispatch_store_dword(uint8_t *buffer, uint32_t value)
 {
     buffer[0] = (uint8_t)(value & 0x000000FFUL);
     buffer[1] = (uint8_t)((value >> 8) & 0x000000FFUL);
     buffer[2] = (uint8_t)((value >> 16) & 0x000000FFUL);
     buffer[3] = (uint8_t)((value >> 24) & 0x000000FFUL);
+}
+#endif
+
+static const pmbus_command_descriptor_t *pmbus_dispatch_find_command_descriptor(uint8_t command)
+{
+    uint8_t index;
+    uint8_t count;
+
+    count = (uint8_t)(sizeof(g_pmbus_command_descriptors) / sizeof(g_pmbus_command_descriptors[0]));
+    for (index = 0U; index < count; index++)
+    {
+        if (g_pmbus_command_descriptors[index].command == command)
+        {
+            return &g_pmbus_command_descriptors[index];
+        }
+    }
+
+    if ((PMBUS_ENABLE_CMD_POLICY != 0U) &&
+        (pmbus_dispatch_is_policy_block_command(command) != 0U))
+    {
+        g_pmbus_dispatch_dynamic_descriptor.command = command;
+        g_pmbus_dispatch_dynamic_descriptor.read_kind = PMBUS_RESP_BLOCK;
+        g_pmbus_dispatch_dynamic_descriptor.flags = PMBUS_CMD_FLAG_BLOCK_WRITE;
+        g_pmbus_dispatch_dynamic_descriptor.query_data_format = 0x07U;
+        return &g_pmbus_dispatch_dynamic_descriptor;
+    }
+
+    if ((PMBUS_ENABLE_CMD_POLICY != 0U) &&
+        (pmbus_dispatch_is_extended_selector(command) != 0U))
+    {
+        g_pmbus_dispatch_dynamic_descriptor.command = command;
+        g_pmbus_dispatch_dynamic_descriptor.read_kind = PMBUS_RESP_NONE;
+        g_pmbus_dispatch_dynamic_descriptor.flags = PMBUS_CMD_FLAG_BLOCK_WRITE | PMBUS_CMD_FLAG_BLOCK_WRITE_READ;
+        g_pmbus_dispatch_dynamic_descriptor.query_data_format = 0x07U;
+        return &g_pmbus_dispatch_dynamic_descriptor;
+    }
+
+    return (const pmbus_command_descriptor_t *)0;
+}
+
+static uint8_t pmbus_dispatch_command_has_flag(uint8_t command, uint8_t flag)
+{
+    const pmbus_command_descriptor_t *descriptor;
+
+    descriptor = pmbus_dispatch_find_command_descriptor(command);
+    if (descriptor == 0)
+    {
+        return 0U;
+    }
+
+    if ((descriptor->flags & flag) != 0U)
+    {
+        return 1U;
+    }
+
+    return 0U;
 }
 
 static uint8_t pmbus_dispatch_is_user_data_command(uint8_t command)
@@ -133,6 +415,7 @@ static uint8_t pmbus_dispatch_is_extended_selector(uint8_t command)
 
 static uint8_t pmbus_dispatch_store_policy_block(uint8_t command, uint8_t *payload, uint8_t data_len)
 {
+#if PMBUS_ENABLE_CMD_POLICY
     uint8_t length;
     uint8_t index;
     uint8_t copy_length;
@@ -174,10 +457,17 @@ static uint8_t pmbus_dispatch_store_policy_block(uint8_t command, uint8_t *paylo
     }
 
     return 0U;
+#else
+    command = command;
+    payload = payload;
+    data_len = data_len;
+    return 0U;
+#endif
 }
 
 static uint8_t pmbus_dispatch_store_extended_policy_block(uint8_t command, uint8_t *payload, uint8_t data_len)
 {
+#if PMBUS_ENABLE_CMD_POLICY
     uint8_t length;
     uint8_t copy_length;
     uint8_t i;
@@ -204,10 +494,17 @@ static uint8_t pmbus_dispatch_store_extended_policy_block(uint8_t command, uint8
     }
 
     return 1U;
+#else
+    command = command;
+    payload = payload;
+    data_len = data_len;
+    return 0U;
+#endif
 }
 
 static uint8_t pmbus_dispatch_build_policy_block_response(uint8_t command, uint8_t *tx_buffer, uint8_t *tx_length)
 {
+#if PMBUS_ENABLE_CMD_POLICY
     uint8_t length;
     uint8_t index;
     uint8_t i;
@@ -249,10 +546,17 @@ static uint8_t pmbus_dispatch_build_policy_block_response(uint8_t command, uint8
 
     *tx_length = (uint8_t)(length + 1U);
     return 1U;
+#else
+    command = command;
+    tx_buffer = tx_buffer;
+    tx_length = tx_length;
+    return 0U;
+#endif
 }
 
 static uint8_t pmbus_dispatch_build_extended_policy_block_response(uint8_t command, uint8_t *payload, uint8_t data_len, uint8_t *tx_buffer, uint8_t *tx_length)
 {
+#if PMBUS_ENABLE_CMD_POLICY
     uint8_t ext_command;
     uint8_t i;
 
@@ -280,305 +584,42 @@ static uint8_t pmbus_dispatch_build_extended_policy_block_response(uint8_t comma
 
     *tx_length = (uint8_t)(g_pmbus_dispatch_extended_length + 1U);
     return 1U;
+#else
+    command = command;
+    payload = payload;
+    data_len = data_len;
+    tx_buffer = tx_buffer;
+    tx_length = tx_length;
+    return 0U;
+#endif
 }
 
 static pmbus_dispatch_response_kind_t pmbus_dispatch_get_read_kind(uint8_t command)
 {
-    if (pmbus_dispatch_is_policy_block_command(command) != 0U)
+    const pmbus_command_descriptor_t *descriptor;
+
+    descriptor = pmbus_dispatch_find_command_descriptor(command);
+    if (descriptor == 0)
     {
-        return PMBUS_RESP_BLOCK;
+        return PMBUS_RESP_NONE;
     }
 
-    switch (command)
-    {
-        case PMBUS_COMMAND_PAGE:
-        case PMBUS_COMMAND_OPERATION:
-        case PMBUS_COMMAND_ON_OFF_CONFIG:
-        case PMBUS_COMMAND_PHASE:
-        case PMBUS_COMMAND_WRITE_PROTECT:
-        case PMBUS_COMMAND_POWER_MODE:
-        case PMBUS_COMMAND_FAN_CONFIG_1_2:
-        case PMBUS_COMMAND_FAN_CONFIG_3_4:
-        case PMBUS_COMMAND_CAPABILITY:
-        case PMBUS_COMMAND_VOUT_MODE:
-        case PMBUS_COMMAND_VOUT_OV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_VOUT_UV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IOUT_OC_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IOUT_OC_LV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IOUT_UC_FAULT_RESPONSE:
-        case PMBUS_COMMAND_OT_FAULT_RESPONSE:
-        case PMBUS_COMMAND_UT_FAULT_RESPONSE:
-        case PMBUS_COMMAND_VIN_OV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_VIN_UV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IIN_OC_FAULT_RESPONSE:
-        case PMBUS_COMMAND_TON_MAX_FAULT_RESPONSE:
-        case PMBUS_COMMAND_POUT_OP_FAULT_RESPONSE:
-        case PMBUS_COMMAND_STATUS_BYTE:
-        case PMBUS_COMMAND_STATUS_VOUT:
-        case PMBUS_COMMAND_STATUS_IOUT:
-        case PMBUS_COMMAND_STATUS_INPUT:
-        case PMBUS_COMMAND_STATUS_TEMPERATURE:
-        case PMBUS_COMMAND_STATUS_CML:
-        case PMBUS_COMMAND_STATUS_OTHER:
-        case PMBUS_COMMAND_STATUS_MFR_SPECIFIC:
-        case PMBUS_COMMAND_STATUS_FANS_1_2:
-        case PMBUS_COMMAND_STATUS_FANS_3_4:
-        case PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG:
-        case PMBUS_COMMAND_MFR_FWUPLOAD_MODE:
-        case PMBUS_COMMAND_PMBUS_REVISION:
-        case PMBUS_COMMAND_MFR_PIN_ACCURACY:
-            return PMBUS_RESP_BYTE;
-
-        case PMBUS_COMMAND_READ_KWH_IN:
-        case PMBUS_COMMAND_READ_KWH_OUT:
-            return PMBUS_RESP_DWORD;
-
-        case PMBUS_COMMAND_VOUT_OV_FAULT_LIMIT:
-        case PMBUS_COMMAND_ZONE_CONFIG:
-        case PMBUS_COMMAND_ZONE_ACTIVE:
-        case PMBUS_COMMAND_VOUT_OV_WARN_LIMIT:
-        case PMBUS_COMMAND_VOUT_UV_WARN_LIMIT:
-        case PMBUS_COMMAND_VOUT_UV_FAULT_LIMIT:
-        case PMBUS_COMMAND_IOUT_OC_FAULT_LIMIT:
-        case PMBUS_COMMAND_IOUT_OC_WARN_LIMIT:
-        case PMBUS_COMMAND_OT_FAULT_LIMIT:
-        case PMBUS_COMMAND_OT_WARN_LIMIT:
-        case PMBUS_COMMAND_VIN_OV_FAULT_LIMIT:
-        case PMBUS_COMMAND_VIN_OV_WARN_LIMIT:
-        case PMBUS_COMMAND_VIN_UV_WARN_LIMIT:
-        case PMBUS_COMMAND_VIN_UV_FAULT_LIMIT:
-        case PMBUS_COMMAND_IIN_OC_FAULT_LIMIT:
-        case PMBUS_COMMAND_IIN_OC_WARN_LIMIT:
-        case PMBUS_COMMAND_FAN_COMMAND_1:
-        case PMBUS_COMMAND_FAN_COMMAND_2:
-        case PMBUS_COMMAND_FAN_COMMAND_3:
-        case PMBUS_COMMAND_FAN_COMMAND_4:
-        case PMBUS_COMMAND_READ_KWH_CONFIG:
-        case PMBUS_COMMAND_READ_VCAP:
-        case PMBUS_COMMAND_VOUT_COMMAND:
-        case PMBUS_COMMAND_VOUT_TRIM:
-        case PMBUS_COMMAND_VOUT_CAL_OFFSET:
-        case PMBUS_COMMAND_VOUT_MAX:
-        case PMBUS_COMMAND_VOUT_MARGIN_HIGH:
-        case PMBUS_COMMAND_VOUT_MARGIN_LOW:
-        case PMBUS_COMMAND_VOUT_TRANSITION_RATE:
-        case PMBUS_COMMAND_VOUT_DROOP:
-        case PMBUS_COMMAND_VOUT_SCALE_LOOP:
-        case PMBUS_COMMAND_VOUT_SCALE_MONITOR:
-        case PMBUS_COMMAND_VOUT_MIN:
-        case PMBUS_COMMAND_POUT_MAX:
-        case PMBUS_COMMAND_MAX_DUTY:
-        case PMBUS_COMMAND_FREQUENCY_SWITCH:
-        case PMBUS_COMMAND_VIN_ON:
-        case PMBUS_COMMAND_VIN_OFF:
-        case PMBUS_COMMAND_INTERLEAVE:
-        case PMBUS_COMMAND_IOUT_CAL_GAIN:
-        case PMBUS_COMMAND_IOUT_CAL_OFFSET:
-        case PMBUS_COMMAND_IOUT_OC_LV_FAULT_LIMIT:
-        case PMBUS_COMMAND_IOUT_UC_FAULT_LIMIT:
-        case PMBUS_COMMAND_UT_WARN_LIMIT:
-        case PMBUS_COMMAND_UT_FAULT_LIMIT:
-        case PMBUS_COMMAND_POWER_GOOD_ON:
-        case PMBUS_COMMAND_POWER_GOOD_OFF:
-        case PMBUS_COMMAND_TON_DELAY:
-        case PMBUS_COMMAND_TON_RISE:
-        case PMBUS_COMMAND_TON_MAX_FAULT_LIMIT:
-        case PMBUS_COMMAND_TOFF_DELAY:
-        case PMBUS_COMMAND_TOFF_FALL:
-        case PMBUS_COMMAND_TOFF_MAX_WARN_LIMIT:
-        case PMBUS_COMMAND_POUT_OP_FAULT_LIMIT:
-        case PMBUS_COMMAND_POUT_OP_WARN_LIMIT:
-        case PMBUS_COMMAND_PIN_OP_WARN_LIMIT:
-        case PMBUS_COMMAND_STATUS_WORD:
-        case PMBUS_COMMAND_READ_VIN:
-        case PMBUS_COMMAND_READ_IIN:
-        case PMBUS_COMMAND_READ_VOUT:
-        case PMBUS_COMMAND_READ_IOUT:
-        case PMBUS_COMMAND_READ_TEMPERATURE_1:
-        case PMBUS_COMMAND_READ_TEMPERATURE_2:
-        case PMBUS_COMMAND_READ_TEMPERATURE_3:
-        case PMBUS_COMMAND_READ_FAN_SPEED_1:
-        case PMBUS_COMMAND_READ_FAN_SPEED_2:
-        case PMBUS_COMMAND_READ_FAN_SPEED_3:
-        case PMBUS_COMMAND_READ_FAN_SPEED_4:
-        case PMBUS_COMMAND_READ_DUTY_CYCLE:
-        case PMBUS_COMMAND_READ_FREQUENCY:
-        case PMBUS_COMMAND_READ_POUT:
-        case PMBUS_COMMAND_READ_PIN:
-        case PMBUS_COMMAND_MFR_VIN_MIN:
-        case PMBUS_COMMAND_MFR_VIN_MAX:
-        case PMBUS_COMMAND_MFR_IIN_MAX:
-        case PMBUS_COMMAND_MFR_PIN_MAX:
-        case PMBUS_COMMAND_MFR_VOUT_MIN:
-        case PMBUS_COMMAND_MFR_VOUT_MAX:
-        case PMBUS_COMMAND_MFR_IOUT_MAX:
-        case PMBUS_COMMAND_MFR_POUT_MAX:
-        case PMBUS_COMMAND_MFR_TAMBIENT_MAX:
-        case PMBUS_COMMAND_MFR_TAMBIENT_MIN:
-        case PMBUS_COMMAND_MFR_MAX_TEMP_1:
-        case PMBUS_COMMAND_MFR_MAX_TEMP_2:
-        case PMBUS_COMMAND_MFR_MAX_TEMP_3:
-        case PMBUS_COMMAND_MFR_FWUPLOAD_STATUS:
-            return PMBUS_RESP_WORD;
-
-        case PMBUS_COMMAND_READ_EIN:
-        case PMBUS_COMMAND_READ_EOUT:
-        case PMBUS_COMMAND_MFR_ID:
-        case PMBUS_COMMAND_MFR_MODEL:
-        case PMBUS_COMMAND_MFR_REVISION:
-        case PMBUS_COMMAND_MFR_LOCATION:
-        case PMBUS_COMMAND_MFR_DATE:
-        case PMBUS_COMMAND_MFR_SERIAL:
-        case PMBUS_COMMAND_APP_PROFILE_SUPPORT:
-        case PMBUS_COMMAND_MFR_EFFICIENCY_LL:
-        case PMBUS_COMMAND_MFR_EFFICIENCY_HL:
-        case PMBUS_COMMAND_IC_DEVICE_ID:
-        case PMBUS_COMMAND_IC_DEVICE_REV:
-        case PMBUS_COMMAND_MFR_BLACKBOX:
-            return PMBUS_RESP_BLOCK;
-
-        default:
-            return PMBUS_RESP_NONE;
-    }
+    return (pmbus_dispatch_response_kind_t)descriptor->read_kind;
 }
 
 static uint8_t pmbus_dispatch_is_write_byte_supported(uint8_t command)
 {
-    switch (command)
-    {
-        case PMBUS_COMMAND_PAGE:
-        case PMBUS_COMMAND_OPERATION:
-        case PMBUS_COMMAND_ON_OFF_CONFIG:
-        case PMBUS_COMMAND_PHASE:
-        case PMBUS_COMMAND_STORE_DEFAULT_CODE:
-        case PMBUS_COMMAND_RESTORE_DEFAULT_CODE:
-        case PMBUS_COMMAND_STORE_USER_CODE:
-        case PMBUS_COMMAND_RESTORE_USER_CODE:
-        case PMBUS_COMMAND_WRITE_PROTECT:
-        case PMBUS_COMMAND_VOUT_MODE:
-        case PMBUS_COMMAND_POWER_MODE:
-        case PMBUS_COMMAND_FAN_CONFIG_1_2:
-        case PMBUS_COMMAND_FAN_CONFIG_3_4:
-        case PMBUS_COMMAND_VOUT_OV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_VOUT_UV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IOUT_OC_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IOUT_OC_LV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IOUT_UC_FAULT_RESPONSE:
-        case PMBUS_COMMAND_OT_FAULT_RESPONSE:
-        case PMBUS_COMMAND_UT_FAULT_RESPONSE:
-        case PMBUS_COMMAND_VIN_OV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_VIN_UV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IIN_OC_FAULT_RESPONSE:
-        case PMBUS_COMMAND_TON_MAX_FAULT_RESPONSE:
-        case PMBUS_COMMAND_POUT_OP_FAULT_RESPONSE:
-        case PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG:
-        case PMBUS_COMMAND_MFR_FWUPLOAD_MODE:
-            return 1U;
-
-        default:
-            return 0U;
-    }
+    return pmbus_dispatch_command_has_flag(command, PMBUS_CMD_FLAG_WRITE_BYTE);
 }
 
 static uint8_t pmbus_dispatch_is_write_word_supported(uint8_t command)
 {
-    switch (command)
-    {
-        case PMBUS_COMMAND_VOUT_OV_FAULT_LIMIT:
-        case PMBUS_COMMAND_VOUT_OV_WARN_LIMIT:
-        case PMBUS_COMMAND_VOUT_UV_WARN_LIMIT:
-        case PMBUS_COMMAND_VOUT_UV_FAULT_LIMIT:
-        case PMBUS_COMMAND_IOUT_OC_FAULT_LIMIT:
-        case PMBUS_COMMAND_IOUT_OC_WARN_LIMIT:
-        case PMBUS_COMMAND_OT_FAULT_LIMIT:
-        case PMBUS_COMMAND_OT_WARN_LIMIT:
-        case PMBUS_COMMAND_VIN_OV_FAULT_LIMIT:
-        case PMBUS_COMMAND_VIN_OV_WARN_LIMIT:
-        case PMBUS_COMMAND_VIN_UV_WARN_LIMIT:
-        case PMBUS_COMMAND_VIN_UV_FAULT_LIMIT:
-        case PMBUS_COMMAND_IIN_OC_FAULT_LIMIT:
-        case PMBUS_COMMAND_IIN_OC_WARN_LIMIT:
-        case PMBUS_COMMAND_FAN_COMMAND_1:
-        case PMBUS_COMMAND_FAN_COMMAND_2:
-        case PMBUS_COMMAND_FAN_COMMAND_3:
-        case PMBUS_COMMAND_FAN_COMMAND_4:
-        case PMBUS_COMMAND_VOUT_COMMAND:
-        case PMBUS_COMMAND_VOUT_TRIM:
-        case PMBUS_COMMAND_VOUT_CAL_OFFSET:
-        case PMBUS_COMMAND_VOUT_MAX:
-        case PMBUS_COMMAND_VOUT_MARGIN_HIGH:
-        case PMBUS_COMMAND_VOUT_MARGIN_LOW:
-        case PMBUS_COMMAND_VOUT_TRANSITION_RATE:
-        case PMBUS_COMMAND_VOUT_DROOP:
-        case PMBUS_COMMAND_VOUT_SCALE_LOOP:
-        case PMBUS_COMMAND_VOUT_SCALE_MONITOR:
-        case PMBUS_COMMAND_VOUT_MIN:
-        case PMBUS_COMMAND_POUT_MAX:
-        case PMBUS_COMMAND_MAX_DUTY:
-        case PMBUS_COMMAND_FREQUENCY_SWITCH:
-        case PMBUS_COMMAND_VIN_ON:
-        case PMBUS_COMMAND_VIN_OFF:
-        case PMBUS_COMMAND_INTERLEAVE:
-        case PMBUS_COMMAND_IOUT_CAL_GAIN:
-        case PMBUS_COMMAND_IOUT_CAL_OFFSET:
-        case PMBUS_COMMAND_IOUT_OC_LV_FAULT_LIMIT:
-        case PMBUS_COMMAND_IOUT_UC_FAULT_LIMIT:
-        case PMBUS_COMMAND_UT_WARN_LIMIT:
-        case PMBUS_COMMAND_UT_FAULT_LIMIT:
-        case PMBUS_COMMAND_POWER_GOOD_ON:
-        case PMBUS_COMMAND_POWER_GOOD_OFF:
-        case PMBUS_COMMAND_TON_DELAY:
-        case PMBUS_COMMAND_TON_RISE:
-        case PMBUS_COMMAND_TON_MAX_FAULT_LIMIT:
-        case PMBUS_COMMAND_TOFF_DELAY:
-        case PMBUS_COMMAND_TOFF_FALL:
-        case PMBUS_COMMAND_TOFF_MAX_WARN_LIMIT:
-        case PMBUS_COMMAND_POUT_OP_FAULT_LIMIT:
-        case PMBUS_COMMAND_POUT_OP_WARN_LIMIT:
-        case PMBUS_COMMAND_PIN_OP_WARN_LIMIT:
-        case PMBUS_COMMAND_SMBALERT_MASK:
-        case PMBUS_COMMAND_ZONE_CONFIG:
-        case PMBUS_COMMAND_ZONE_ACTIVE:
-            return 1U;
-
-        default:
-            return 0U;
-    }
+    return pmbus_dispatch_command_has_flag(command, PMBUS_CMD_FLAG_WRITE_WORD);
 }
 
 uint8_t pmbus_dispatch_is_known_command(uint8_t command)
 {
-    if (pmbus_dispatch_is_extended_selector(command) != 0U)
-    {
-        return 1U;
-    }
-
-    if (pmbus_dispatch_get_read_kind(command) != PMBUS_RESP_NONE)
-    {
-        return 1U;
-    }
-
-    if (pmbus_dispatch_is_send_byte_supported(command) != 0U)
-    {
-        return 1U;
-    }
-
-    if (pmbus_dispatch_is_write_byte_supported(command) != 0U)
-    {
-        return 1U;
-    }
-
-    if (pmbus_dispatch_is_write_word_supported(command) != 0U)
-    {
-        return 1U;
-    }
-
-    if (pmbus_dispatch_is_block_write_supported(command) != 0U)
-    {
-        return 1U;
-    }
-
-    if (pmbus_dispatch_is_block_write_read_process_call_supported(command) != 0U)
+    if (pmbus_dispatch_find_command_descriptor(command) != 0)
     {
         return 1U;
     }
@@ -588,55 +629,17 @@ uint8_t pmbus_dispatch_is_known_command(uint8_t command)
 
 static uint8_t pmbus_dispatch_is_send_byte_supported(uint8_t command)
 {
-    if (command == PMBUS_COMMAND_CLEAR_FAULTS)
-    {
-        return 1U;
-    }
-
-    if ((command == PMBUS_COMMAND_STORE_DEFAULT_ALL) ||
-        (command == PMBUS_COMMAND_RESTORE_DEFAULT_ALL) ||
-        (command == PMBUS_COMMAND_STORE_USER_ALL) ||
-        (command == PMBUS_COMMAND_RESTORE_USER_ALL))
-    {
-        return 1U;
-    }
-
-    return 0U;
+    return pmbus_dispatch_command_has_flag(command, PMBUS_CMD_FLAG_SEND_BYTE);
 }
 
 static uint8_t pmbus_dispatch_is_block_write_supported(uint8_t command)
 {
-    if ((pmbus_dispatch_is_policy_block_command(command) != 0U) ||
-        (pmbus_dispatch_is_extended_selector(command) != 0U))
-    {
-        return 1U;
-    }
-
-    if ((command == PMBUS_COMMAND_PAGE_PLUS_WRITE) ||
-        (command == PMBUS_COMMAND_MFR_FWUPLOAD))
-    {
-        return 1U;
-    }
-
-    return 0U;
+    return pmbus_dispatch_command_has_flag(command, PMBUS_CMD_FLAG_BLOCK_WRITE);
 }
 
 static uint8_t pmbus_dispatch_is_block_write_read_process_call_supported(uint8_t command)
 {
-    if (pmbus_dispatch_is_extended_selector(command) != 0U)
-    {
-        return 1U;
-    }
-
-    if ((command == PMBUS_COMMAND_PAGE_PLUS_READ) ||
-        (command == PMBUS_COMMAND_QUERY) ||
-        (command == PMBUS_COMMAND_COEFFICIENTS) ||
-        (command == PMBUS_COMMAND_SMBALERT_MASK))
-    {
-        return 1U;
-    }
-
-    return 0U;
+    return pmbus_dispatch_command_has_flag(command, PMBUS_CMD_FLAG_BLOCK_WRITE_READ);
 }
 
 static uint8_t pmbus_dispatch_is_write_locked(void)
@@ -651,176 +654,15 @@ static uint8_t pmbus_dispatch_is_write_locked(void)
 
 static uint8_t pmbus_dispatch_get_query_data_format(uint8_t command)
 {
-    if ((pmbus_dispatch_is_policy_block_command(command) != 0U) ||
-        (pmbus_dispatch_is_extended_selector(command) != 0U))
+    const pmbus_command_descriptor_t *descriptor;
+
+    descriptor = pmbus_dispatch_find_command_descriptor(command);
+    if (descriptor == 0)
     {
         return 0x07U;
     }
 
-    switch (command)
-    {
-        case PMBUS_COMMAND_PAGE:
-        case PMBUS_COMMAND_OPERATION:
-        case PMBUS_COMMAND_ON_OFF_CONFIG:
-        case PMBUS_COMMAND_PHASE:
-        case PMBUS_COMMAND_STORE_DEFAULT_CODE:
-        case PMBUS_COMMAND_RESTORE_DEFAULT_CODE:
-        case PMBUS_COMMAND_STORE_USER_CODE:
-        case PMBUS_COMMAND_RESTORE_USER_CODE:
-        case PMBUS_COMMAND_WRITE_PROTECT:
-        case PMBUS_COMMAND_CAPABILITY:
-        case PMBUS_COMMAND_VOUT_MODE:
-        case PMBUS_COMMAND_POWER_MODE:
-        case PMBUS_COMMAND_FAN_CONFIG_1_2:
-        case PMBUS_COMMAND_FAN_CONFIG_3_4:
-        case PMBUS_COMMAND_VOUT_OV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_VOUT_UV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IOUT_OC_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IOUT_OC_LV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IOUT_UC_FAULT_RESPONSE:
-        case PMBUS_COMMAND_OT_FAULT_RESPONSE:
-        case PMBUS_COMMAND_UT_FAULT_RESPONSE:
-        case PMBUS_COMMAND_VIN_OV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_VIN_UV_FAULT_RESPONSE:
-        case PMBUS_COMMAND_IIN_OC_FAULT_RESPONSE:
-        case PMBUS_COMMAND_TON_MAX_FAULT_RESPONSE:
-        case PMBUS_COMMAND_POUT_OP_FAULT_RESPONSE:
-        case PMBUS_COMMAND_STATUS_BYTE:
-        case PMBUS_COMMAND_STATUS_VOUT:
-        case PMBUS_COMMAND_STATUS_IOUT:
-        case PMBUS_COMMAND_STATUS_INPUT:
-        case PMBUS_COMMAND_STATUS_TEMPERATURE:
-        case PMBUS_COMMAND_STATUS_CML:
-        case PMBUS_COMMAND_STATUS_OTHER:
-        case PMBUS_COMMAND_STATUS_MFR_SPECIFIC:
-        case PMBUS_COMMAND_STATUS_FANS_1_2:
-        case PMBUS_COMMAND_STATUS_FANS_3_4:
-        case PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG:
-        case PMBUS_COMMAND_MFR_FWUPLOAD_MODE:
-        case PMBUS_COMMAND_PMBUS_REVISION:
-        case PMBUS_COMMAND_MFR_PIN_ACCURACY:
-            return 0x04U;
-
-        case PMBUS_COMMAND_READ_KWH_IN:
-        case PMBUS_COMMAND_READ_KWH_OUT:
-            return 0x03U;
-
-        case PMBUS_COMMAND_VOUT_OV_FAULT_LIMIT:
-        case PMBUS_COMMAND_VOUT_OV_WARN_LIMIT:
-        case PMBUS_COMMAND_VOUT_UV_WARN_LIMIT:
-        case PMBUS_COMMAND_VOUT_UV_FAULT_LIMIT:
-        case PMBUS_COMMAND_IOUT_OC_FAULT_LIMIT:
-        case PMBUS_COMMAND_IOUT_OC_WARN_LIMIT:
-        case PMBUS_COMMAND_OT_FAULT_LIMIT:
-        case PMBUS_COMMAND_OT_WARN_LIMIT:
-        case PMBUS_COMMAND_VIN_OV_FAULT_LIMIT:
-        case PMBUS_COMMAND_VIN_OV_WARN_LIMIT:
-        case PMBUS_COMMAND_VIN_UV_WARN_LIMIT:
-        case PMBUS_COMMAND_VIN_UV_FAULT_LIMIT:
-        case PMBUS_COMMAND_IIN_OC_FAULT_LIMIT:
-        case PMBUS_COMMAND_IIN_OC_WARN_LIMIT:
-        case PMBUS_COMMAND_FAN_COMMAND_1:
-        case PMBUS_COMMAND_FAN_COMMAND_2:
-        case PMBUS_COMMAND_FAN_COMMAND_3:
-        case PMBUS_COMMAND_FAN_COMMAND_4:
-        case PMBUS_COMMAND_VOUT_COMMAND:
-        case PMBUS_COMMAND_VOUT_TRIM:
-        case PMBUS_COMMAND_VOUT_CAL_OFFSET:
-        case PMBUS_COMMAND_VOUT_MAX:
-        case PMBUS_COMMAND_VOUT_MARGIN_HIGH:
-        case PMBUS_COMMAND_VOUT_MARGIN_LOW:
-        case PMBUS_COMMAND_VOUT_TRANSITION_RATE:
-        case PMBUS_COMMAND_VOUT_DROOP:
-        case PMBUS_COMMAND_VOUT_SCALE_LOOP:
-        case PMBUS_COMMAND_VOUT_SCALE_MONITOR:
-        case PMBUS_COMMAND_VOUT_MIN:
-        case PMBUS_COMMAND_POUT_MAX:
-        case PMBUS_COMMAND_MAX_DUTY:
-        case PMBUS_COMMAND_FREQUENCY_SWITCH:
-        case PMBUS_COMMAND_VIN_ON:
-        case PMBUS_COMMAND_VIN_OFF:
-        case PMBUS_COMMAND_IOUT_CAL_GAIN:
-        case PMBUS_COMMAND_IOUT_CAL_OFFSET:
-        case PMBUS_COMMAND_IOUT_OC_LV_FAULT_LIMIT:
-        case PMBUS_COMMAND_IOUT_UC_FAULT_LIMIT:
-        case PMBUS_COMMAND_UT_WARN_LIMIT:
-        case PMBUS_COMMAND_UT_FAULT_LIMIT:
-        case PMBUS_COMMAND_POWER_GOOD_ON:
-        case PMBUS_COMMAND_POWER_GOOD_OFF:
-        case PMBUS_COMMAND_TON_DELAY:
-        case PMBUS_COMMAND_TON_RISE:
-        case PMBUS_COMMAND_TON_MAX_FAULT_LIMIT:
-        case PMBUS_COMMAND_TOFF_DELAY:
-        case PMBUS_COMMAND_TOFF_FALL:
-        case PMBUS_COMMAND_TOFF_MAX_WARN_LIMIT:
-        case PMBUS_COMMAND_POUT_OP_FAULT_LIMIT:
-        case PMBUS_COMMAND_POUT_OP_WARN_LIMIT:
-        case PMBUS_COMMAND_PIN_OP_WARN_LIMIT:
-        case PMBUS_COMMAND_READ_VIN:
-        case PMBUS_COMMAND_READ_IIN:
-        case PMBUS_COMMAND_READ_KWH_CONFIG:
-        case PMBUS_COMMAND_READ_VCAP:
-        case PMBUS_COMMAND_READ_VOUT:
-        case PMBUS_COMMAND_READ_IOUT:
-        case PMBUS_COMMAND_READ_TEMPERATURE_1:
-        case PMBUS_COMMAND_READ_TEMPERATURE_2:
-        case PMBUS_COMMAND_READ_TEMPERATURE_3:
-        case PMBUS_COMMAND_READ_FAN_SPEED_1:
-        case PMBUS_COMMAND_READ_FAN_SPEED_2:
-        case PMBUS_COMMAND_READ_FAN_SPEED_3:
-        case PMBUS_COMMAND_READ_FAN_SPEED_4:
-        case PMBUS_COMMAND_READ_DUTY_CYCLE:
-        case PMBUS_COMMAND_READ_FREQUENCY:
-        case PMBUS_COMMAND_READ_POUT:
-        case PMBUS_COMMAND_READ_PIN:
-        case PMBUS_COMMAND_MFR_VIN_MIN:
-        case PMBUS_COMMAND_MFR_VIN_MAX:
-        case PMBUS_COMMAND_MFR_IIN_MAX:
-        case PMBUS_COMMAND_MFR_PIN_MAX:
-        case PMBUS_COMMAND_MFR_VOUT_MIN:
-        case PMBUS_COMMAND_MFR_VOUT_MAX:
-        case PMBUS_COMMAND_MFR_IOUT_MAX:
-        case PMBUS_COMMAND_MFR_POUT_MAX:
-        case PMBUS_COMMAND_MFR_TAMBIENT_MAX:
-        case PMBUS_COMMAND_MFR_TAMBIENT_MIN:
-        case PMBUS_COMMAND_MFR_MAX_TEMP_1:
-        case PMBUS_COMMAND_MFR_MAX_TEMP_2:
-        case PMBUS_COMMAND_MFR_MAX_TEMP_3:
-            return 0x00U;
-
-        case PMBUS_COMMAND_STATUS_WORD:
-        case PMBUS_COMMAND_MFR_FWUPLOAD_STATUS:
-        case PMBUS_COMMAND_SMBALERT_MASK:
-        case PMBUS_COMMAND_ZONE_CONFIG:
-        case PMBUS_COMMAND_ZONE_ACTIVE:
-        case PMBUS_COMMAND_INTERLEAVE:
-            return 0x07U;
-
-        case PMBUS_COMMAND_PAGE_PLUS_WRITE:
-        case PMBUS_COMMAND_PAGE_PLUS_READ:
-        case PMBUS_COMMAND_COEFFICIENTS:
-        case PMBUS_COMMAND_READ_EIN:
-        case PMBUS_COMMAND_READ_EOUT:
-        case PMBUS_COMMAND_APP_PROFILE_SUPPORT:
-        case PMBUS_COMMAND_MFR_EFFICIENCY_LL:
-        case PMBUS_COMMAND_MFR_EFFICIENCY_HL:
-        case PMBUS_COMMAND_MFR_BLACKBOX:
-        case PMBUS_COMMAND_MFR_FWUPLOAD:
-            return 0x06U;
-
-        case PMBUS_COMMAND_MFR_ID:
-        case PMBUS_COMMAND_MFR_MODEL:
-        case PMBUS_COMMAND_MFR_REVISION:
-        case PMBUS_COMMAND_MFR_LOCATION:
-        case PMBUS_COMMAND_MFR_DATE:
-        case PMBUS_COMMAND_MFR_SERIAL:
-        case PMBUS_COMMAND_IC_DEVICE_ID:
-        case PMBUS_COMMAND_IC_DEVICE_REV:
-            return 0x07U;
-
-        default:
-            return 0x07U;
-    }
+    return descriptor->query_data_format;
 }
 
 static uint8_t pmbus_dispatch_get_query_response(uint8_t command)
@@ -849,7 +691,7 @@ static uint8_t pmbus_dispatch_get_query_response(uint8_t command)
          (pmbus_dispatch_is_write_byte_supported(command) != 0U) ||
          (pmbus_dispatch_is_write_word_supported(command) != 0U) ||
          (pmbus_dispatch_is_block_write_supported(command) != 0U) ||
-         (command == PMBUS_COMMAND_VOUT_COMMAND)))
+         (pmbus_dispatch_command_has_flag(command, PMBUS_CMD_FLAG_PROCESS_CALL) != 0U)))
     {
         response = (uint8_t)(response | 0x40U);
     }
@@ -973,6 +815,7 @@ static uint8_t pmbus_dispatch_build_page_plus_read_response(uint8_t *payload, ui
             }
             break;
 
+#if PMBUS_ENABLE_CMD_ENERGY
         case PMBUS_RESP_DWORD:
             if (pmbus_dispatch_build_dword_response(target_command, &tx_buffer[1], tx_length) != 0U)
             {
@@ -981,6 +824,7 @@ static uint8_t pmbus_dispatch_build_page_plus_read_response(uint8_t *payload, ui
                 result = 1U;
             }
             break;
+#endif
 
         case PMBUS_RESP_BLOCK:
             if (pmbus_dispatch_build_block_response(target_command, tx_buffer, tx_length) != 0U)
@@ -1001,6 +845,7 @@ static uint8_t pmbus_dispatch_build_byte_response(uint8_t command, uint8_t *tx_b
 {
     switch (command)
     {
+#if PMBUS_ENABLE_CMD_CORE
         case PMBUS_COMMAND_PAGE:
             tx_buffer[0] = pmbus_app_get_page();
             break;
@@ -1020,7 +865,9 @@ static uint8_t pmbus_dispatch_build_byte_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_WRITE_PROTECT:
             tx_buffer[0] = pmbus_app_get_write_protect();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_FAN
         case PMBUS_COMMAND_FAN_CONFIG_1_2:
             tx_buffer[0] = pmbus_app_get_fan_config_1_2();
             break;
@@ -1028,7 +875,9 @@ static uint8_t pmbus_dispatch_build_byte_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_FAN_CONFIG_3_4:
             tx_buffer[0] = pmbus_app_get_fan_config_3_4();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_CORE
         case PMBUS_COMMAND_CAPABILITY:
             tx_buffer[0] = pmbus_app_get_capability();
             break;
@@ -1040,7 +889,9 @@ static uint8_t pmbus_dispatch_build_byte_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_POWER_MODE:
             tx_buffer[0] = pmbus_app_get_power_mode();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_LIMITS
         case PMBUS_COMMAND_VOUT_OV_FAULT_RESPONSE:
             tx_buffer[0] = pmbus_app_get_vout_ov_fault_response();
             break;
@@ -1088,7 +939,9 @@ static uint8_t pmbus_dispatch_build_byte_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_POUT_OP_FAULT_RESPONSE:
             tx_buffer[0] = pmbus_app_get_pout_op_fault_response();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_STATUS
         case PMBUS_COMMAND_STATUS_BYTE:
             tx_buffer[0] = pmbus_app_get_status_byte();
             break;
@@ -1128,22 +981,31 @@ static uint8_t pmbus_dispatch_build_byte_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_STATUS_FANS_3_4:
             tx_buffer[0] = 0x00U;
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_MFR_EXT
         case PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG:
             tx_buffer[0] = pmbus_app_get_mfr_cold_redundancy_config();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_FWUPLOAD
         case PMBUS_COMMAND_MFR_FWUPLOAD_MODE:
             tx_buffer[0] = pmbus_app_get_mfr_fwupload_mode();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_CORE
         case PMBUS_COMMAND_PMBUS_REVISION:
             tx_buffer[0] = pmbus_app_get_pmbus_revision();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_MFR_EXT
         case PMBUS_COMMAND_MFR_PIN_ACCURACY:
             tx_buffer[0] = 50U;
             break;
+#endif
 
         default:
             return 0U;
@@ -1161,6 +1023,7 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
 
     switch (command)
     {
+#if PMBUS_ENABLE_CMD_ZONE
         case PMBUS_COMMAND_ZONE_CONFIG:
             value = pmbus_app_get_zone_config();
             break;
@@ -1168,7 +1031,9 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_ZONE_ACTIVE:
             value = pmbus_app_get_zone_active();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_LIMITS
         case PMBUS_COMMAND_VOUT_OV_FAULT_LIMIT:
             value = pmbus_app_get_vout_ov_fault_limit();
             break;
@@ -1240,7 +1105,9 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_IIN_OC_WARN_LIMIT:
             value = pmbus_app_get_iin_oc_warn_limit();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_FAN
         case PMBUS_COMMAND_FAN_COMMAND_1:
             value = pmbus_app_get_fan_command_1();
             break;
@@ -1256,19 +1123,27 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_FAN_COMMAND_4:
             value = pmbus_app_get_fan_command_4();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_ENERGY
         case PMBUS_COMMAND_READ_KWH_CONFIG:
             value = 0x0000U;
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_TELEMETRY
         case PMBUS_COMMAND_READ_VCAP:
             value = pmbus_app_get_read_vin();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_CORE
         case PMBUS_COMMAND_VOUT_COMMAND:
             value = pmbus_app_get_vout_command();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_LIMITS
         case PMBUS_COMMAND_VOUT_TRIM:
             value = pmbus_app_get_vout_trim();
             break;
@@ -1384,11 +1259,15 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_PIN_OP_WARN_LIMIT:
             value = pmbus_app_get_pin_op_warn_limit();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_STATUS
         case PMBUS_COMMAND_STATUS_WORD:
             value = pmbus_app_get_status_word();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_TELEMETRY
         case PMBUS_COMMAND_READ_VIN:
             value = pmbus_app_get_read_vin();
             break;
@@ -1416,7 +1295,9 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_READ_TEMPERATURE_3:
             value = pmbus_app_get_read_temperature_3();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_FAN
         case PMBUS_COMMAND_READ_FAN_SPEED_1:
             value = pmbus_app_get_read_fan_speed_1();
             break;
@@ -1432,7 +1313,9 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_READ_FAN_SPEED_4:
             value = 0x0000U;
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_TELEMETRY
         case PMBUS_COMMAND_READ_DUTY_CYCLE:
             value = 0x0000U;
             break;
@@ -1448,11 +1331,15 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_READ_PIN:
             value = pmbus_app_get_read_pin();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_FWUPLOAD
         case PMBUS_COMMAND_MFR_FWUPLOAD_STATUS:
             value = pmbus_app_get_mfr_fwupload_status();
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_MFR_EXT
         case PMBUS_COMMAND_MFR_VIN_MIN:
             value = pmbus_app_get_vin_on();
             break;
@@ -1504,6 +1391,7 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_MFR_MAX_TEMP_3:
             value = pmbus_app_get_read_temperature_3();
             break;
+#endif
 
         default:
             return 0U;
@@ -1514,6 +1402,7 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
     return 1U;
 }
 
+#if PMBUS_ENABLE_CMD_ENERGY
 static uint8_t pmbus_dispatch_build_dword_response(uint8_t command, uint8_t *tx_buffer, uint8_t *tx_length)
 {
     uint32_t value;
@@ -1522,6 +1411,7 @@ static uint8_t pmbus_dispatch_build_dword_response(uint8_t command, uint8_t *tx_
 
     switch (command)
     {
+#if PMBUS_ENABLE_CMD_ENERGY
         case PMBUS_COMMAND_READ_KWH_IN:
             value = 0UL;
             break;
@@ -1529,6 +1419,7 @@ static uint8_t pmbus_dispatch_build_dword_response(uint8_t command, uint8_t *tx_
         case PMBUS_COMMAND_READ_KWH_OUT:
             value = 0UL;
             break;
+#endif
 
         default:
             return 0U;
@@ -1538,6 +1429,7 @@ static uint8_t pmbus_dispatch_build_dword_response(uint8_t command, uint8_t *tx_
     *tx_length = 4U;
     return 1U;
 }
+#endif
 
 static uint8_t pmbus_dispatch_build_block_response(uint8_t command, uint8_t *tx_buffer, uint8_t *tx_length)
 {
@@ -1550,6 +1442,7 @@ static uint8_t pmbus_dispatch_build_block_response(uint8_t command, uint8_t *tx_
 
     switch (command)
     {
+#if PMBUS_ENABLE_CMD_ENERGY
         case PMBUS_COMMAND_READ_EIN:
             length = pmbus_app_get_read_ein(&data_ptr);
             break;
@@ -1557,7 +1450,9 @@ static uint8_t pmbus_dispatch_build_block_response(uint8_t command, uint8_t *tx_
         case PMBUS_COMMAND_READ_EOUT:
             length = pmbus_app_get_read_eout(&data_ptr);
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_MFR_BASIC
         case PMBUS_COMMAND_MFR_ID:
             length = pmbus_app_get_mfr_id(&data_ptr);
             break;
@@ -1569,7 +1464,9 @@ static uint8_t pmbus_dispatch_build_block_response(uint8_t command, uint8_t *tx_
         case PMBUS_COMMAND_MFR_REVISION:
             length = pmbus_app_get_mfr_revision(&data_ptr);
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_MFR_EXT
         case PMBUS_COMMAND_MFR_LOCATION:
             data_ptr = g_pmbus_dispatch_mfr_location;
             length = (uint8_t)(sizeof(g_pmbus_dispatch_mfr_location) - 1U);
@@ -1579,11 +1476,15 @@ static uint8_t pmbus_dispatch_build_block_response(uint8_t command, uint8_t *tx_
             data_ptr = g_pmbus_dispatch_mfr_date;
             length = (uint8_t)(sizeof(g_pmbus_dispatch_mfr_date) - 1U);
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_MFR_BASIC
         case PMBUS_COMMAND_MFR_SERIAL:
             length = pmbus_app_get_mfr_serial(&data_ptr);
             break;
+#endif
 
+#if PMBUS_ENABLE_CMD_MFR_EXT
         case PMBUS_COMMAND_APP_PROFILE_SUPPORT:
             data_ptr = g_pmbus_dispatch_app_profile;
             length = (uint8_t)sizeof(g_pmbus_dispatch_app_profile);
@@ -1612,6 +1513,7 @@ static uint8_t pmbus_dispatch_build_block_response(uint8_t command, uint8_t *tx_
         case PMBUS_COMMAND_MFR_BLACKBOX:
             length = pmbus_app_get_mfr_blackbox(&data_ptr);
             break;
+#endif
 
         default:
             if (pmbus_dispatch_build_policy_block_response(command, tx_buffer, tx_length) != 0U)
@@ -1661,7 +1563,8 @@ pmbus_dispatch_protocol_t pmbus_dispatch_detect_protocol(uint8_t command, uint8_
             return PMBUS_PROTOCOL_BLOCK_WRITE_READ_PROCESS_CALL;
         }
 
-        if ((command == PMBUS_COMMAND_VOUT_COMMAND) && (data_len == 2U))
+        if ((data_len == 2U) &&
+            (pmbus_dispatch_command_has_flag(command, PMBUS_CMD_FLAG_PROCESS_CALL) != 0U))
         {
             return PMBUS_PROTOCOL_PROCESS_CALL;
         }
@@ -1774,21 +1677,26 @@ void pmbus_dispatch_prepare_error_response(uint8_t command, uint8_t *tx_buffer, 
 
 uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_t *tx_buffer, uint8_t *tx_length)
 {
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
     pmbus_dispatch_transaction_t nested_transaction;
     uint8_t nested_tx_buffer[PMBUS_MAX_BLOCK_SIZE + 1U];
     uint8_t nested_tx_length;
+#endif
     uint16_t word_value;
     uint8_t cml_mask;
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
     uint8_t saved_page;
     uint8_t target_command;
     uint8_t target_length;
     uint8_t index;
+#endif
 
     *tx_length = 0U;
 
     switch (transaction->protocol)
     {
         case PMBUS_PROTOCOL_SEND_BYTE:
+#if PMBUS_ENABLE_CMD_CORE
             if (transaction->command == PMBUS_COMMAND_CLEAR_FAULTS)
             {
                 pmbus_app_clear_faults();
@@ -1808,6 +1716,7 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 pmbus_app_record_store_restore(transaction->command, 0U);
                 return 1U;
             }
+#endif
             break;
 
         case PMBUS_PROTOCOL_WRITE_BYTE:
@@ -1819,6 +1728,7 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
 
             switch (transaction->command)
             {
+#if PMBUS_ENABLE_CMD_CORE
                 case PMBUS_COMMAND_PAGE:
                     pmbus_app_set_page(transaction->payload[0]);
                     return 1U;
@@ -1845,7 +1755,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 case PMBUS_COMMAND_WRITE_PROTECT:
                     pmbus_app_set_write_protect(transaction->payload[0]);
                     return 1U;
+#endif
 
+#if PMBUS_ENABLE_CMD_FAN
                 case PMBUS_COMMAND_FAN_CONFIG_1_2:
                     pmbus_app_set_fan_config_1_2(transaction->payload[0]);
                     return 1U;
@@ -1853,7 +1765,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 case PMBUS_COMMAND_FAN_CONFIG_3_4:
                     pmbus_app_set_fan_config_3_4(transaction->payload[0]);
                     return 1U;
+#endif
 
+#if PMBUS_ENABLE_CMD_CORE
                 case PMBUS_COMMAND_VOUT_MODE:
                     pmbus_app_set_vout_mode(transaction->payload[0]);
                     return 1U;
@@ -1861,7 +1775,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 case PMBUS_COMMAND_POWER_MODE:
                     pmbus_app_set_power_mode(transaction->payload[0]);
                     return 1U;
+#endif
 
+#if PMBUS_ENABLE_CMD_LIMITS
                 case PMBUS_COMMAND_VOUT_OV_FAULT_RESPONSE:
                     pmbus_app_set_vout_ov_fault_response(transaction->payload[0]);
                     return 1U;
@@ -1909,14 +1825,19 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 case PMBUS_COMMAND_POUT_OP_FAULT_RESPONSE:
                     pmbus_app_set_pout_op_fault_response(transaction->payload[0]);
                     return 1U;
+#endif
 
+#if PMBUS_ENABLE_CMD_MFR_EXT
                 case PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG:
                     pmbus_app_set_mfr_cold_redundancy_config(transaction->payload[0]);
                     return 1U;
+#endif
 
+#if PMBUS_ENABLE_CMD_FWUPLOAD
                 case PMBUS_COMMAND_MFR_FWUPLOAD_MODE:
                     pmbus_app_set_mfr_fwupload_mode(transaction->payload[0]);
                     return 1U;
+#endif
 
                 default:
                     break;
@@ -1933,6 +1854,7 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
 
             switch (transaction->command)
             {
+#if PMBUS_ENABLE_CMD_ZONE
                 case PMBUS_COMMAND_ZONE_CONFIG:
                     pmbus_app_set_zone_config(word_value);
                     return 1U;
@@ -1940,7 +1862,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 case PMBUS_COMMAND_ZONE_ACTIVE:
                     pmbus_app_set_zone_active(word_value);
                     return 1U;
+#endif
 
+#if PMBUS_ENABLE_CMD_LIMITS
                 case PMBUS_COMMAND_VOUT_OV_FAULT_LIMIT:
                     pmbus_app_set_vout_ov_fault_limit(word_value);
                     return 1U;
@@ -2012,7 +1936,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 case PMBUS_COMMAND_IIN_OC_WARN_LIMIT:
                     pmbus_app_set_iin_oc_warn_limit(word_value);
                     return 1U;
+#endif
 
+#if PMBUS_ENABLE_CMD_FAN
                 case PMBUS_COMMAND_FAN_COMMAND_1:
                     pmbus_app_set_fan_command_1(word_value);
                     return 1U;
@@ -2028,11 +1954,15 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 case PMBUS_COMMAND_FAN_COMMAND_4:
                     pmbus_app_set_fan_command_4(word_value);
                     return 1U;
+#endif
 
+#if PMBUS_ENABLE_CMD_CORE
                 case PMBUS_COMMAND_VOUT_COMMAND:
                     pmbus_app_set_vout_command(word_value);
                     return 1U;
+#endif
 
+#if PMBUS_ENABLE_CMD_LIMITS
                 case PMBUS_COMMAND_VOUT_TRIM:
                     pmbus_app_set_vout_trim(word_value);
                     return 1U;
@@ -2148,10 +2078,13 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 case PMBUS_COMMAND_PIN_OP_WARN_LIMIT:
                     pmbus_app_set_pin_op_warn_limit(word_value);
                     return 1U;
+#endif
 
+#if PMBUS_ENABLE_CMD_CORE
                 case PMBUS_COMMAND_SMBALERT_MASK:
                     pmbus_app_set_smbalert_mask(word_value);
                     return 1U;
+#endif
 
                 default:
                     break;
@@ -2172,12 +2105,14 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
             }
             break;
 
+#if PMBUS_ENABLE_CMD_ENERGY
         case PMBUS_PROTOCOL_READ_DWORD:
             if (pmbus_dispatch_build_dword_response(transaction->command, tx_buffer, tx_length) != 0U)
             {
                 return 1U;
             }
             break;
+#endif
 
         case PMBUS_PROTOCOL_BLOCK_READ:
             if (pmbus_dispatch_build_block_response(transaction->command, tx_buffer, tx_length) != 0U)
@@ -2187,6 +2122,7 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
             break;
 
         case PMBUS_PROTOCOL_PROCESS_CALL:
+#if PMBUS_ENABLE_CMD_CORE
             if (transaction->command == PMBUS_COMMAND_VOUT_COMMAND)
             {
                 if (pmbus_dispatch_is_write_locked() != 0U)
@@ -2200,6 +2136,7 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 *tx_length = 2U;
                 return 1U;
             }
+#endif
             break;
 
         case PMBUS_PROTOCOL_BLOCK_WRITE:
@@ -2208,6 +2145,7 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 break;
             }
 
+#if PMBUS_ENABLE_CMD_POLICY
             if (pmbus_dispatch_is_policy_block_command(transaction->command) != 0U)
             {
                 if (pmbus_dispatch_store_policy_block(transaction->command,
@@ -2226,7 +2164,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     return 1U;
                 }
             }
-            else if (transaction->command == PMBUS_COMMAND_PAGE_PLUS_WRITE)
+#endif
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
+            if (transaction->command == PMBUS_COMMAND_PAGE_PLUS_WRITE)
             {
                 if ((transaction->data_len >= 3U) &&
                     (transaction->payload[0] >= 2U) &&
@@ -2274,7 +2214,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     }
                 }
             }
-            else if (transaction->command == PMBUS_COMMAND_MFR_FWUPLOAD)
+#endif
+#if PMBUS_ENABLE_CMD_FWUPLOAD
+            if (transaction->command == PMBUS_COMMAND_MFR_FWUPLOAD)
             {
                 if (transaction->data_len >= 1U)
                 {
@@ -2284,9 +2226,11 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     }
                 }
             }
+#endif
             break;
 
         case PMBUS_PROTOCOL_BLOCK_WRITE_READ_PROCESS_CALL:
+#if PMBUS_ENABLE_CMD_POLICY
             if (pmbus_dispatch_is_extended_selector(transaction->command) != 0U)
             {
                 if (pmbus_dispatch_build_extended_policy_block_response(transaction->command,
@@ -2298,7 +2242,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     return 1U;
                 }
             }
-            else if (transaction->command == PMBUS_COMMAND_QUERY)
+#endif
+#if PMBUS_ENABLE_CMD_CORE
+            if (transaction->command == PMBUS_COMMAND_QUERY)
             {
                 if (pmbus_dispatch_build_query_response(transaction->payload,
                     transaction->data_len,
@@ -2308,7 +2254,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     return 1U;
                 }
             }
-            else if (transaction->command == PMBUS_COMMAND_COEFFICIENTS)
+#endif
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
+            if (transaction->command == PMBUS_COMMAND_COEFFICIENTS)
             {
                 if (pmbus_dispatch_build_coefficients_response(transaction->payload,
                     transaction->data_len,
@@ -2318,7 +2266,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     return 1U;
                 }
             }
-            else if (transaction->command == PMBUS_COMMAND_SMBALERT_MASK)
+#endif
+#if PMBUS_ENABLE_CMD_CORE
+            if (transaction->command == PMBUS_COMMAND_SMBALERT_MASK)
             {
                 if (pmbus_dispatch_build_smbalert_mask_response(transaction->payload,
                     transaction->data_len,
@@ -2328,7 +2278,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     return 1U;
                 }
             }
-            else if (transaction->command == PMBUS_COMMAND_PAGE_PLUS_READ)
+#endif
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
+            if (transaction->command == PMBUS_COMMAND_PAGE_PLUS_READ)
             {
                 if (pmbus_dispatch_build_page_plus_read_response(transaction->payload,
                     transaction->data_len,
@@ -2338,6 +2290,7 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     return 1U;
                 }
             }
+#endif
             break;
 
         default:

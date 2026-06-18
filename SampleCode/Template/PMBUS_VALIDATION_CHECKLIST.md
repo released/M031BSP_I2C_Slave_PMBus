@@ -16,7 +16,7 @@ Compliance target:
 Use assumptions:
 - 7-bit slave address from `PAGE` device is `0x5A` unless A0/A1 strap changes it.
 - `Write address byte = 0xB4`, `Read address byte = 0xB5`.
-- When `PMBUS_ENABLE_PEC = 1`, append/expect the SMBus PEC byte.
+- PEC behavior follows `PMBUS_PEC_POLICY`; optional mode accepts host PEC when present and always generates slave read PEC.
 - Logic analyzer should decode I2C/SMBus with repeated START enabled.
 
 ## 1. Bus Basics
@@ -379,11 +379,17 @@ Use assumptions:
 
 ## 9. PEC Validation
 
-- With `PMBUS_ENABLE_PEC = 1`
+- With `PMBUS_PEC_POLICY = PMBUS_PEC_POLICY_OPTIONAL`
   - Verify `Read Byte/Word/Block Read` appends PEC
-  - Verify `Write Byte/Word/Block Write` rejects bad PEC and sets `STATUS_CML.PACKET_ERROR_CHECK_FAILED`
-- With `PMBUS_ENABLE_PEC = 0`
+  - Verify `Write Byte/Word/Block Write` accepts no PEC
+  - Verify `Write Byte/Word/Block Write` accepts valid PEC when present
+  - Verify `Write Byte/Word/Block Write` rejects bad PEC when the frame shape indicates a PEC byte and sets `STATUS_CML.PACKET_ERROR_CHECK_FAILED`
+- With `PMBUS_PEC_POLICY = PMBUS_PEC_POLICY_REQUIRED`
+  - Verify `Write Byte/Word/Block Write` rejects missing PEC and sets `STATUS_CML.PACKET_ERROR_CHECK_FAILED`
+  - Verify `Read Byte/Word/Block Read` still appends slave PEC
+- With `PMBUS_PEC_POLICY = PMBUS_PEC_POLICY_DISABLED`
   - Verify the same transactions succeed without PEC byte
+  - Verify extra PEC bytes are treated as normal payload and rejected if the protocol length no longer matches
 
 ## 10. Error Handling
 
@@ -410,6 +416,13 @@ Use assumptions:
   - `S B4 A 1B A 00 A <PEC> A Sr B5 A 02 A <LSB> A <MSB> A <PEC> N P`
 - `COEFFICIENTS 0x30` block write-read process call with PEC
   - `S B4 A 30 A 01 A <TARGET_CMD> A <PEC> A Sr B5 A 05 A <M_L> A <M_H> A <B_L> A <B_H> A <R> A <PEC> N P`
+- `ARA 0x0C` when ALERT# asserted
+  - no PEC host read: `S 19 A <ALERTING_WRITE_ADDR> N P`
+  - PEC host read: `S 19 A <ALERTING_WRITE_ADDR> A <PEC> N P`
+- `ARP 0x61 GET_UDID`
+  - `S C2 A 03 A Sr C3 A 11 A <17-byte UDID> A <PEC> N P`
+- `Zone Read 0x28`
+  - `S 51 A 05 A <ZONE_CONFIG_L> A <ZONE_CONFIG_H> A <ZONE_ACTIVE_L> A <ZONE_ACTIVE_H> A <STATUS_BYTE> A <PEC> N P`
 
 ## 12. Host Communication-Format Coverage
 
@@ -438,6 +451,13 @@ When validating this slave with the Pico PMBus master tool, the intended host-si
     - final ARA byte must drive the controller to a transmit-finished status; debug log should show alias state returning to normal
     - after ARA is served, the portable alias path must stay inhibited until ALERT# is actually deasserted so the host can read `STATUS_CML` and clear faults at the normal address
     - after master NACK/STOP, alias must release and normal slave address must respond again
+  - ARP alias:
+    - `0x61` should ACK when `PMBUS_ENABLE_ARP = 1`
+    - `GET_UDID` returns count `0x11` plus 17 UDID bytes
+    - `ASSIGN_ADDRESS` updates the normal PMBus slave address and reconfigures aliases
+  - Zone alias:
+    - `0x28` Zone Read should return count `0x05`, `ZONE_CONFIG`, `ZONE_ACTIVE`, and `STATUS_BYTE`
+    - `0x37` Zone Write is disabled by default on M031 unless a free alias slot is assigned
 
 Checklist interpretation:
 

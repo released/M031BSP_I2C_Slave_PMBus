@@ -19,7 +19,9 @@ typedef enum
     PMBUS_DEBUG_EVENT_WRITE_DONE,
     PMBUS_DEBUG_EVENT_RECOVER,
     PMBUS_DEBUG_EVENT_RECOVER_FAIL,
-    PMBUS_DEBUG_EVENT_ARA_ALIAS
+    PMBUS_DEBUG_EVENT_ARA_ALIAS,
+    PMBUS_DEBUG_EVENT_ARP,
+    PMBUS_DEBUG_EVENT_ZONE
 } pmbus_debug_event_id_t;
 
 typedef enum
@@ -46,6 +48,22 @@ typedef enum
     PMBUS_RECOVER_STATE_STUCK_BUS
 } pmbus_recover_state_t;
 
+typedef enum
+{
+    PMBUS_REQUEST_TARGET_NORMAL = 0,
+    PMBUS_REQUEST_TARGET_ARA,
+    PMBUS_REQUEST_TARGET_ARP,
+    PMBUS_REQUEST_TARGET_ZONE_READ,
+    PMBUS_REQUEST_TARGET_ZONE_WRITE
+} pmbus_request_target_t;
+
+#define PMBUS_ARP_COMMAND_RESET_DEVICE        0x00U
+#define PMBUS_ARP_COMMAND_PREPARE_TO_ARP      0x01U
+#define PMBUS_ARP_COMMAND_GET_UDID            0x03U
+#define PMBUS_ARP_COMMAND_ASSIGN_ADDRESS      0x04U
+#define PMBUS_ARP_COMMAND_DIRECTED_GET_UDID   0x05U
+#define PMBUS_ARP_UDID_LENGTH                 17U
+
 typedef struct
 {
     uint8_t event_id;
@@ -64,6 +82,7 @@ typedef struct
 
 typedef struct
 {
+    uint8_t address_7bit;
     uint8_t raw_len;
     uint8_t payload_len;
     uint8_t protocol;
@@ -93,8 +112,17 @@ static volatile uint8_t g_last_command;
 static volatile uint8_t g_last_command_valid;
 static volatile uint8_t g_last_read_used_pec;
 static volatile uint8_t g_current_slave_address_7bit;
+static volatile uint8_t g_request_address_7bit;
+static volatile uint8_t g_request_target;
+static volatile uint8_t g_pending_request_address_7bit;
+static volatile uint8_t g_pending_request_target;
 static volatile uint8_t g_ara_alias_active;
 static volatile uint8_t g_ara_alias_inhibit;
+static volatile uint8_t g_arp_prepared;
+static volatile uint8_t g_arp_address_resolved;
+static volatile uint8_t g_arp_last_command;
+static volatile uint8_t g_address_change_pending;
+static volatile uint8_t g_pending_slave_address_7bit;
 static volatile uint8_t g_prefetched_read_valid;
 static volatile uint8_t g_read_response_ready;
 static volatile uint8_t g_recover_pending;
@@ -110,6 +138,7 @@ static volatile uint8_t g_recover_fail_count;
 
 static uint8_t g_rx_buffer[PMBUS_RX_BUFFER_SIZE];
 static uint8_t g_tx_buffer[PMBUS_TX_BUFFER_SIZE];
+static uint8_t g_arp_udid[PMBUS_ARP_UDID_LENGTH];
 static pmbus_dispatch_transaction_t g_dispatch_transaction;
 
 static volatile uint8_t g_debug_head;
@@ -289,14 +318,24 @@ static void pmbus_drv_queue_event(uint8_t event_id, uint8_t value0, uint8_t valu
 static void pmbus_drv_reset_tx(void);
 static void pmbus_drv_reset_rx(void);
 static void pmbus_drv_set_active_address(uint8_t address_7bit);
+static void pmbus_drv_configure_alias_addresses(void);
 static void pmbus_drv_restore_normal_address(void);
+static void pmbus_drv_update_request_target(void);
+static void pmbus_drv_save_pending_request_context(void);
+static void pmbus_drv_restore_pending_request_context(void);
 static void pmbus_drv_prepare_ara_response(void);
+static void pmbus_drv_prepare_arp_response(void);
+static void pmbus_drv_process_arp_frame(uint8_t repeated_start);
+static void pmbus_drv_prepare_zone_read_response(void);
+static void pmbus_drv_process_zone_write_frame(uint8_t repeated_start);
 static void pmbus_drv_update_ara_alias_state(void);
 static uint8_t pmbus_drv_bus_lines_released(void);
 static uint8_t pmbus_drv_bus_clear(void);
 static uint8_t pmbus_drv_recover_bus(void);
 static void pmbus_drv_set_recover_pending(uint8_t reason);
 static void pmbus_drv_append_tx_pec(uint8_t command_length);
+static void pmbus_drv_append_read_only_tx_pec(uint8_t address_7bit);
+static uint8_t pmbus_drv_should_append_read_pec(uint8_t repeated_start);
 static void pmbus_drv_load_next_tx_byte(void);
 static uint8_t pmbus_drv_compute_write_pec(uint8_t frame_length_without_pec);
 static pmbus_frame_class_t pmbus_drv_classify_current_frame(void);
@@ -368,6 +407,7 @@ static void pmbus_drv_capture_debug_frame(uint8_t raw_length, pmbus_dispatch_tra
     }
 
     snapshot = &g_debug_frame_queue[g_debug_frame_head];
+    snapshot->address_7bit = g_pending_request_address_7bit;
     snapshot->raw_len = capped_length;
     snapshot->payload_len = transaction->data_len;
     snapshot->protocol = (uint8_t)transaction->protocol;
@@ -478,6 +518,7 @@ static void pmbus_drv_print_debug_frame(const pmbus_debug_frame_snapshot_t *snap
 #if PMBUS_DEBUG_ENABLE
     uint8_t index;
     uint8_t command;
+    uint8_t address_byte;
     const char *command_name;
 
     command = 0U;
@@ -486,6 +527,7 @@ static void pmbus_drv_print_debug_frame(const pmbus_debug_frame_snapshot_t *snap
         command = snapshot->raw[0];
     }
     command_name = pmbus_drv_get_command_name(command);
+    address_byte = PMBUS_ADDRESS_7BIT_TO_WRITE(snapshot->address_7bit);
 
     PMBUS_DEBUG_PRINT("PMBus RX cmd=0x%02X (%s) raw=%u payload=%u proto=%u rs=%u pec=%u valid=%u\r\n",
         (unsigned int)command,
@@ -497,14 +539,16 @@ static void pmbus_drv_print_debug_frame(const pmbus_debug_frame_snapshot_t *snap
         (unsigned int)snapshot->pec_present,
         (unsigned int)snapshot->pec_valid);
 
-    PMBUS_DEBUG_PRINT("PMBus RX raw:\r\n");
+    PMBUS_DEBUG_PRINT("address=0x%02X:", (unsigned int)address_byte);
     for (index = 0U; index < snapshot->raw_len; index++)
     {
-        PMBUS_DEBUG_PRINT("0x%02X,", (unsigned int)snapshot->raw[index]);
-        if (((index + 1U) % 8U) == 0U)
+        PMBUS_DEBUG_PRINT("[0x%02X],", (unsigned int)snapshot->raw[index]);
+
+        if ((index+1)%8 ==0)
         {
             PMBUS_DEBUG_PRINT("\r\n");
-        }
+        }       
+
     }
     PMBUS_DEBUG_PRINT("\r\n");
 #endif
@@ -644,8 +688,8 @@ static uint8_t pmbus_drv_compute_tx_pec(const pmbus_debug_tx_snapshot_t *snapsho
     }
     tx_data_length = (uint8_t)(tx_data_length - 1U);
 
-    device_write_address = PMBUS_ADDRESS_7BIT_TO_WRITE(pmbus_app_get_slave_address_7bit());
-    device_read_address = PMBUS_ADDRESS_7BIT_TO_READ(pmbus_app_get_slave_address_7bit());
+    device_write_address = PMBUS_ADDRESS_7BIT_TO_WRITE(g_request_address_7bit);
+    device_read_address = PMBUS_ADDRESS_7BIT_TO_READ(g_request_address_7bit);
 
     crc = 0U;
     crc = pmbus_pec_update(crc, device_write_address);
@@ -882,10 +926,77 @@ static void pmbus_drv_set_active_address(uint8_t address_7bit)
     pmbus_io_i2c_slave_open(PMBUS_ADDRESS_7BIT_TO_WRITE(address_7bit));
 }
 
+static void pmbus_drv_configure_alias_addresses(void)
+{
+#if PMBUS_ENABLE_ARA_ALIAS
+    if ((pmbus_app_is_alert_asserted() != 0U) && (g_ara_alias_inhibit == 0U))
+    {
+        pmbus_io_i2c_slave_set_alias(PMBUS_I2C_ALIAS_SLOT_ARA, PMBUS_ALERT_RESPONSE_ADDRESS_7BIT, Enable);
+    }
+    else
+    {
+        pmbus_io_i2c_slave_set_alias(PMBUS_I2C_ALIAS_SLOT_ARA, PMBUS_ALERT_RESPONSE_ADDRESS_7BIT, Disable);
+    }
+#endif
+
+#if PMBUS_ENABLE_ARP
+    pmbus_io_i2c_slave_set_alias(PMBUS_I2C_ALIAS_SLOT_ARP, PMBUS_ARP_DEFAULT_ADDRESS_7BIT, Enable);
+#endif
+
+#if PMBUS_ENABLE_ZONE_ALIAS
+    pmbus_io_i2c_slave_set_alias(PMBUS_I2C_ALIAS_SLOT_ZONE_READ, PMBUS_ZONE_READ_ADDRESS_7BIT, Enable);
+    pmbus_io_i2c_slave_set_alias(PMBUS_I2C_ALIAS_SLOT_ZONE_WRITE, PMBUS_ZONE_WRITE_ADDRESS_7BIT, Enable);
+#endif
+}
+
 static void pmbus_drv_restore_normal_address(void)
 {
     g_ara_alias_active = 0U;
     pmbus_drv_set_active_address(pmbus_app_get_slave_address_7bit());
+    pmbus_drv_configure_alias_addresses();
+}
+
+static void pmbus_drv_update_request_target(void)
+{
+    uint8_t address_7bit;
+
+    address_7bit = pmbus_io_i2c_get_received_address();
+    if (address_7bit == 0U)
+    {
+        address_7bit = pmbus_app_get_slave_address_7bit();
+    }
+
+    g_request_address_7bit = address_7bit;
+    g_request_target = PMBUS_REQUEST_TARGET_NORMAL;
+
+    if (address_7bit == PMBUS_ALERT_RESPONSE_ADDRESS_7BIT)
+    {
+        g_request_target = PMBUS_REQUEST_TARGET_ARA;
+    }
+    else if (address_7bit == PMBUS_ARP_DEFAULT_ADDRESS_7BIT)
+    {
+        g_request_target = PMBUS_REQUEST_TARGET_ARP;
+    }
+    else if (address_7bit == PMBUS_ZONE_READ_ADDRESS_7BIT)
+    {
+        g_request_target = PMBUS_REQUEST_TARGET_ZONE_READ;
+    }
+    else if (address_7bit == PMBUS_ZONE_WRITE_ADDRESS_7BIT)
+    {
+        g_request_target = PMBUS_REQUEST_TARGET_ZONE_WRITE;
+    }
+}
+
+static void pmbus_drv_save_pending_request_context(void)
+{
+    g_pending_request_address_7bit = g_request_address_7bit;
+    g_pending_request_target = g_request_target;
+}
+
+static void pmbus_drv_restore_pending_request_context(void)
+{
+    g_request_address_7bit = g_pending_request_address_7bit;
+    g_request_target = g_pending_request_target;
 }
 
 static void pmbus_drv_prepare_ara_response(void)
@@ -909,6 +1020,179 @@ static void pmbus_drv_prepare_ara_response(void)
     g_tx_index = 0U;
 }
 
+static void pmbus_drv_build_arp_udid(void)
+{
+    uint8_t index;
+
+    for (index = 0U; index < PMBUS_ARP_UDID_LENGTH; index++)
+    {
+        g_arp_udid[index] = 0x00U;
+    }
+
+    /*
+        Product UDID fields must be bound to production data before release.
+        The final byte carries the current PMBus slave write address so ARP
+        validation can confirm address ownership.
+    */
+    g_arp_udid[0] = 0x01U;
+    g_arp_udid[1] = 0x13U;
+    g_arp_udid[14] = (uint8_t)(g_arp_address_resolved & 0x01U);
+    g_arp_udid[15] = pmbus_app_get_address_valid();
+    g_arp_udid[16] = PMBUS_ADDRESS_7BIT_TO_WRITE(pmbus_app_get_slave_address_7bit());
+}
+
+static void pmbus_drv_prepare_arp_response(void)
+{
+    uint8_t index;
+    uint8_t command_length;
+
+    pmbus_drv_build_arp_udid();
+    g_tx_buffer[0] = PMBUS_ARP_UDID_LENGTH;
+    for (index = 0U; index < PMBUS_ARP_UDID_LENGTH; index++)
+    {
+        g_tx_buffer[(uint8_t)(index + 1U)] = g_arp_udid[index];
+    }
+
+    g_tx_length = (uint8_t)(PMBUS_ARP_UDID_LENGTH + 1U);
+    g_tx_index = 0U;
+    command_length = g_rx_length;
+    if (command_length > 0U)
+    {
+        g_last_read_used_pec = pmbus_drv_should_append_read_pec(1U);
+        pmbus_drv_append_tx_pec(command_length);
+    }
+
+    pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARP, g_arp_last_command, g_tx_length);
+}
+
+static void pmbus_drv_process_arp_frame(uint8_t repeated_start)
+{
+    uint8_t command;
+    uint8_t assigned_address_7bit;
+
+    if (g_rx_length == 0U)
+    {
+        pmbus_drv_reset_tx();
+        return;
+    }
+
+    command = g_rx_buffer[0];
+    g_arp_last_command = command;
+
+    if (repeated_start != 0U)
+    {
+        if ((command == PMBUS_ARP_COMMAND_GET_UDID) ||
+            (command == PMBUS_ARP_COMMAND_DIRECTED_GET_UDID))
+        {
+            pmbus_drv_prepare_arp_response();
+            return;
+        }
+
+        g_tx_buffer[0] = 0x00U;
+        g_tx_length = 1U;
+        g_tx_index = 0U;
+        return;
+    }
+
+    switch (command)
+    {
+        case PMBUS_ARP_COMMAND_RESET_DEVICE:
+            g_arp_prepared = 0U;
+            g_arp_address_resolved = 0U;
+            pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARP, command, 0U);
+            break;
+
+        case PMBUS_ARP_COMMAND_PREPARE_TO_ARP:
+            g_arp_prepared = 1U;
+            g_arp_address_resolved = 0U;
+            pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARP, command, 1U);
+            break;
+
+        case PMBUS_ARP_COMMAND_ASSIGN_ADDRESS:
+            if (g_rx_length >= 2U)
+            {
+                assigned_address_7bit = (uint8_t)((g_rx_buffer[(uint8_t)(g_rx_length - 1U)] >> 1) & 0x7FU);
+                if ((assigned_address_7bit >= 0x08U) && (assigned_address_7bit <= 0x77U))
+                {
+                    g_pending_slave_address_7bit = assigned_address_7bit;
+                    g_address_change_pending = 1U;
+                    g_arp_address_resolved = 1U;
+                    pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARP, command, assigned_address_7bit);
+                }
+            }
+            break;
+
+        default:
+            pmbus_app_set_status_cml(PMBUS_STATUS_CML_INVALID_OR_UNSUPPORTED_COMMAND_RECEIVED);
+            pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARP, command, 0xFFU);
+            break;
+    }
+}
+
+static void pmbus_drv_prepare_zone_read_response(void)
+{
+    uint16_t zone_config;
+    uint16_t zone_active;
+
+    zone_config = pmbus_app_get_zone_config();
+    zone_active = pmbus_app_get_zone_active();
+
+    /*
+        Portable Zone Read alias payload:
+        count, ZONE_CONFIG LSB/MSB, ZONE_ACTIVE LSB/MSB, STATUS_BYTE.
+        Product-specific zone group behavior can extend this block later.
+    */
+    g_tx_buffer[0] = 5U;
+    g_tx_buffer[1] = (uint8_t)(zone_config & 0x00FFU);
+    g_tx_buffer[2] = (uint8_t)((zone_config >> 8) & 0x00FFU);
+    g_tx_buffer[3] = (uint8_t)(zone_active & 0x00FFU);
+    g_tx_buffer[4] = (uint8_t)((zone_active >> 8) & 0x00FFU);
+    g_tx_buffer[5] = pmbus_app_get_status_byte();
+    g_tx_length = 6U;
+    g_tx_index = 0U;
+    g_last_read_used_pec = pmbus_drv_should_append_read_pec(1U);
+    pmbus_drv_append_read_only_tx_pec(PMBUS_ZONE_READ_ADDRESS_7BIT);
+    pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ZONE, PMBUS_ZONE_READ_ADDRESS_7BIT, g_tx_length);
+}
+
+static void pmbus_drv_process_zone_write_frame(uint8_t repeated_start)
+{
+    uint16_t value;
+
+    if (repeated_start != 0U)
+    {
+        pmbus_drv_prepare_zone_read_response();
+        return;
+    }
+
+    if (g_rx_length >= 3U)
+    {
+        value = (uint16_t)g_rx_buffer[1];
+        value = (uint16_t)(value | ((uint16_t)g_rx_buffer[2] << 8));
+
+        if (g_rx_buffer[0] == PMBUS_COMMAND_ZONE_CONFIG)
+        {
+            pmbus_app_set_zone_config(value);
+            pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ZONE, PMBUS_COMMAND_ZONE_CONFIG, (uint8_t)(value & 0x00FFU));
+        }
+        else if (g_rx_buffer[0] == PMBUS_COMMAND_ZONE_ACTIVE)
+        {
+            pmbus_app_set_zone_active(value);
+            pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ZONE, PMBUS_COMMAND_ZONE_ACTIVE, (uint8_t)(value & 0x00FFU));
+        }
+        else
+        {
+            pmbus_app_set_status_cml(PMBUS_STATUS_CML_INVALID_OR_UNSUPPORTED_COMMAND_RECEIVED);
+            pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ZONE, g_rx_buffer[0], 0xFFU);
+        }
+    }
+    else
+    {
+        pmbus_app_set_status_cml(PMBUS_STATUS_CML_INVALID_OR_UNSUPPORTED_DATA_RECEIVED);
+        pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ZONE, 0x00U, 0xFEU);
+    }
+}
+
 static void pmbus_drv_update_ara_alias_state(void)
 {
 #if PMBUS_ENABLE_ARA_ALIAS
@@ -916,7 +1200,12 @@ static void pmbus_drv_update_ara_alias_state(void)
     {
         if (g_ara_alias_active != 0U)
         {
+#if PMBUS_I2C_ALIAS_SLOT_ARA == PMBUS_I2C_ALIAS_SLOT_DISABLED
             pmbus_drv_restore_normal_address();
+#else
+            g_ara_alias_active = 0U;
+            pmbus_drv_configure_alias_addresses();
+#endif
             pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARA_ALIAS, g_current_slave_address_7bit, 0U);
         }
         return;
@@ -927,7 +1216,11 @@ static void pmbus_drv_update_ara_alias_state(void)
         if ((g_ara_alias_active == 0U) && (g_ara_alias_inhibit == 0U))
         {
             g_ara_alias_active = 1U;
+#if PMBUS_I2C_ALIAS_SLOT_ARA == PMBUS_I2C_ALIAS_SLOT_DISABLED
             pmbus_drv_set_active_address(PMBUS_ALERT_RESPONSE_ADDRESS_7BIT);
+#else
+            pmbus_drv_configure_alias_addresses();
+#endif
             pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARA_ALIAS, PMBUS_ALERT_RESPONSE_ADDRESS_7BIT, 1U);
         }
     }
@@ -936,7 +1229,12 @@ static void pmbus_drv_update_ara_alias_state(void)
         g_ara_alias_inhibit = 0U;
         if (g_ara_alias_active != 0U)
         {
+#if PMBUS_I2C_ALIAS_SLOT_ARA == PMBUS_I2C_ALIAS_SLOT_DISABLED
             pmbus_drv_restore_normal_address();
+#else
+            g_ara_alias_active = 0U;
+            pmbus_drv_configure_alias_addresses();
+#endif
             pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARA_ALIAS, g_current_slave_address_7bit, 0U);
         }
     }
@@ -1015,6 +1313,10 @@ static uint8_t pmbus_drv_recover_bus(void)
     pmbus_drv_reset_tx();
     g_write_frame_pending = 0U;
     g_write_frame_pending_tick = 0UL;
+    g_request_address_7bit = pmbus_app_get_slave_address_7bit();
+    g_request_target = PMBUS_REQUEST_TARGET_NORMAL;
+    g_pending_request_address_7bit = g_request_address_7bit;
+    g_pending_request_target = PMBUS_REQUEST_TARGET_NORMAL;
     bus_released = 0U;
 
     for (attempt_count = 0U; attempt_count < PMBUS_I2C_BUS_CLEAR_RETRY_COUNT; attempt_count++)
@@ -1028,6 +1330,7 @@ static uint8_t pmbus_drv_recover_bus(void)
 
     if (bus_released != 0U)
     {
+#if PMBUS_I2C_ALIAS_SLOT_ARA == PMBUS_I2C_ALIAS_SLOT_DISABLED
         if (g_ara_alias_active != 0U)
         {
             pmbus_drv_set_active_address(PMBUS_ALERT_RESPONSE_ADDRESS_7BIT);
@@ -1036,6 +1339,10 @@ static uint8_t pmbus_drv_recover_bus(void)
         {
             pmbus_drv_set_active_address(pmbus_app_get_slave_address_7bit());
         }
+#else
+        pmbus_drv_set_active_address(pmbus_app_get_slave_address_7bit());
+        pmbus_drv_configure_alias_addresses();
+#endif
 
         pmbus_io_i2c_clear_timeout_flag();
         /*
@@ -1073,8 +1380,8 @@ static void pmbus_drv_append_tx_pec(uint8_t command_length)
         return;
     }
 
-    device_write_address = PMBUS_ADDRESS_7BIT_TO_WRITE(pmbus_app_get_slave_address_7bit());
-    device_read_address = PMBUS_ADDRESS_7BIT_TO_READ(pmbus_app_get_slave_address_7bit());
+    device_write_address = PMBUS_ADDRESS_7BIT_TO_WRITE(g_request_address_7bit);
+    device_read_address = PMBUS_ADDRESS_7BIT_TO_READ(g_request_address_7bit);
 
     crc = 0U;
     crc = pmbus_pec_update(crc, device_write_address);
@@ -1096,6 +1403,50 @@ static void pmbus_drv_append_tx_pec(uint8_t command_length)
 #else
     command_length = command_length;
 #endif
+}
+
+static void pmbus_drv_append_read_only_tx_pec(uint8_t address_7bit)
+{
+#if PMBUS_ENABLE_PEC
+    uint8_t crc;
+    uint8_t index;
+
+    if (g_last_read_used_pec == 0U)
+    {
+        return;
+    }
+
+    if (g_tx_length >= PMBUS_TX_BUFFER_SIZE)
+    {
+        return;
+    }
+
+    crc = 0U;
+    crc = pmbus_pec_update(crc, PMBUS_ADDRESS_7BIT_TO_READ(address_7bit));
+    for (index = 0U; index < g_tx_length; index++)
+    {
+        crc = pmbus_pec_update(crc, g_tx_buffer[index]);
+    }
+
+    g_tx_buffer[g_tx_length] = crc;
+    g_tx_length = (uint8_t)(g_tx_length + 1U);
+#else
+    address_7bit = address_7bit;
+#endif
+}
+
+static uint8_t pmbus_drv_should_append_read_pec(uint8_t repeated_start)
+{
+#if PMBUS_ENABLE_PEC
+    if (repeated_start != 0U)
+    {
+        return 1U;
+    }
+#else
+    repeated_start = repeated_start;
+#endif
+
+    return 0U;
 }
 
 static void pmbus_drv_load_next_tx_byte(void)
@@ -1121,7 +1472,7 @@ static uint8_t pmbus_drv_compute_write_pec(uint8_t frame_length_without_pec)
     uint8_t index;
     uint8_t device_write_address;
 
-    device_write_address = PMBUS_ADDRESS_7BIT_TO_WRITE(pmbus_app_get_slave_address_7bit());
+    device_write_address = PMBUS_ADDRESS_7BIT_TO_WRITE(g_request_address_7bit);
     crc = 0U;
     crc = pmbus_pec_update(crc, device_write_address);
 
@@ -1210,9 +1561,21 @@ static void pmbus_drv_prepare_default_read(void)
     transaction = &g_dispatch_transaction;
     tx_length = 0U;
 
-    if (g_ara_alias_active != 0U)
+    if (g_request_target == PMBUS_REQUEST_TARGET_ARA)
     {
         pmbus_drv_prepare_ara_response();
+        return;
+    }
+
+    if (g_request_target == PMBUS_REQUEST_TARGET_ARP)
+    {
+        pmbus_drv_prepare_arp_response();
+        return;
+    }
+
+    if (g_request_target == PMBUS_REQUEST_TARGET_ZONE_READ)
+    {
+        pmbus_drv_prepare_zone_read_response();
         return;
     }
 
@@ -1259,9 +1622,33 @@ static void pmbus_drv_process_frame(uint8_t repeated_start)
 
     transaction = &g_dispatch_transaction;
 
-    if (g_ara_alias_active != 0U)
+    if (g_request_target == PMBUS_REQUEST_TARGET_ARA)
     {
         pmbus_drv_prepare_ara_response();
+        g_write_frame_pending = 0U;
+        g_write_frame_pending_tick = 0UL;
+        return;
+    }
+
+    if (g_request_target == PMBUS_REQUEST_TARGET_ARP)
+    {
+        pmbus_drv_process_arp_frame(repeated_start);
+        g_write_frame_pending = 0U;
+        g_write_frame_pending_tick = 0UL;
+        return;
+    }
+
+    if (g_request_target == PMBUS_REQUEST_TARGET_ZONE_READ)
+    {
+        pmbus_drv_prepare_zone_read_response();
+        g_write_frame_pending = 0U;
+        g_write_frame_pending_tick = 0UL;
+        return;
+    }
+
+    if (g_request_target == PMBUS_REQUEST_TARGET_ZONE_WRITE)
+    {
+        pmbus_drv_process_zone_write_frame(repeated_start);
         g_write_frame_pending = 0U;
         g_write_frame_pending_tick = 0UL;
         return;
@@ -1287,6 +1674,7 @@ static void pmbus_drv_process_frame(uint8_t repeated_start)
     used_pec = 0U;
     valid_pec = 1U;
 
+#if PMBUS_ENABLE_PEC
     if (transaction->data_len > 0U)
     {
         candidate_length = (uint8_t)(transaction->data_len - 1U);
@@ -1299,16 +1687,14 @@ static void pmbus_drv_process_frame(uint8_t repeated_start)
 
             if (last_byte == computed_pec)
             {
-                if (protocol_no_pec == PMBUS_PROTOCOL_UNKNOWN)
-                {
-                    transaction->data_len = candidate_length;
-                    used_pec = 1U;
-                    valid_pec = 1U;
-                }
+                transaction->data_len = candidate_length;
+                used_pec = 1U;
+                valid_pec = 1U;
             }
             else
             {
-                if (protocol_no_pec == PMBUS_PROTOCOL_UNKNOWN)
+                if ((protocol_no_pec == PMBUS_PROTOCOL_UNKNOWN) ||
+                    ((repeated_start == 0U) && (PMBUS_PEC_POLICY == PMBUS_PEC_POLICY_REQUIRED)))
                 {
                     transaction->data_len = candidate_length;
                     used_pec = 1U;
@@ -1317,6 +1703,18 @@ static void pmbus_drv_process_frame(uint8_t repeated_start)
             }
         }
     }
+
+    if ((repeated_start == 0U) &&
+        (PMBUS_PEC_POLICY == PMBUS_PEC_POLICY_REQUIRED) &&
+        (used_pec == 0U))
+    {
+        valid_pec = 0U;
+    }
+#else
+    last_byte = 0U;
+    computed_pec = 0U;
+    candidate_length = 0U;
+#endif
 
     transaction->pec_present = used_pec;
     transaction->pec_valid = valid_pec;
@@ -1347,7 +1745,7 @@ static void pmbus_drv_process_frame(uint8_t repeated_start)
     g_last_read_used_pec = 0U;
     tx_length = 0U;
 
-    if ((used_pec != 0U) && (valid_pec == 0U))
+    if (valid_pec == 0U)
     {
         pmbus_app_set_status_cml(PMBUS_STATUS_CML_PACKET_ERROR_CHECK_FAILED);
         pmbus_dispatch_prepare_error_response(transaction->command, g_tx_buffer, &tx_length);
@@ -1383,10 +1781,10 @@ static void pmbus_drv_process_frame(uint8_t repeated_start)
     g_tx_length = tx_length;
     g_tx_index = 0U;
 
-    if ((repeated_start != 0U) && (used_pec != 0U) && (valid_pec != 0U))
+    if ((repeated_start != 0U) && (pmbus_drv_should_append_read_pec(repeated_start) != 0U))
     {
         g_last_read_used_pec = 1U;
-        pmbus_drv_append_tx_pec((uint8_t)(g_rx_length - 1U));
+        pmbus_drv_append_tx_pec((uint8_t)(g_rx_length - ((used_pec != 0U) ? 1U : 0U)));
     }
 
     if (repeated_start != 0U)
@@ -1424,8 +1822,17 @@ void pmbus_drv_init(void)
     }
 
     g_current_slave_address_7bit = pmbus_app_get_slave_address_7bit();
+    g_request_address_7bit = g_current_slave_address_7bit;
+    g_request_target = PMBUS_REQUEST_TARGET_NORMAL;
+    g_pending_request_address_7bit = g_current_slave_address_7bit;
+    g_pending_request_target = PMBUS_REQUEST_TARGET_NORMAL;
     g_ara_alias_active = 0U;
     g_ara_alias_inhibit = 0U;
+    g_arp_prepared = 0U;
+    g_arp_address_resolved = 1U;
+    g_arp_last_command = 0U;
+    g_address_change_pending = 0U;
+    g_pending_slave_address_7bit = g_current_slave_address_7bit;
     g_prefetched_read_valid = 0U;
     g_read_response_ready = 0U;
     g_recover_pending = 0U;
@@ -1465,6 +1872,7 @@ void pmbus_drv_init(void)
     }
 
     pmbus_drv_set_active_address(g_current_slave_address_7bit);
+    pmbus_drv_configure_alias_addresses();
     /*
         Do not arm the timeout counter at startup. The ISR enables it only
         for active slave-transmit phases that actually need stuck-bus
@@ -1485,6 +1893,22 @@ void pmbus_drv_background_task(void)
 
     pmbus_app_background_task();
     pmbus_drv_update_ara_alias_state();
+
+    if (g_address_change_pending != 0U)
+    {
+        pmbus_app_set_busy_state(1U);
+        pmbus_io_i2c_interrupt(Disable);
+        pmbus_app_set_slave_address_7bit(g_pending_slave_address_7bit);
+        pmbus_drv_set_active_address(g_pending_slave_address_7bit);
+        pmbus_drv_configure_alias_addresses();
+        pmbus_io_i2c_clear_timeout_flag();
+        pmbus_io_i2c_timeout(Disable);
+        pmbus_io_i2c_interrupt(Enable);
+        g_request_address_7bit = g_pending_slave_address_7bit;
+        g_current_slave_address_7bit = g_pending_slave_address_7bit;
+        g_address_change_pending = 0U;
+        pmbus_app_set_busy_state(0U);
+    }
 
     if (g_recover_pending != 0U)
     {
@@ -1657,6 +2081,14 @@ void pmbus_drv_background_task(void)
                 PMBUS_DEBUG_PRINT("PMBus ARA alias addr7=0x%02X state=%u\r\n", (unsigned int)event.value0, (unsigned int)event.value1);
                 break;
 
+            case PMBUS_DEBUG_EVENT_ARP:
+                PMBUS_DEBUG_PRINT("PMBus ARP cmd=0x%02X value=0x%02X\r\n", (unsigned int)event.value0, (unsigned int)event.value1);
+                break;
+
+            case PMBUS_DEBUG_EVENT_ZONE:
+                PMBUS_DEBUG_PRINT("PMBus Zone event=0x%02X value=0x%02X\r\n", (unsigned int)event.value0, (unsigned int)event.value1);
+                break;
+
             default:
                 break;
         }
@@ -1693,11 +2125,13 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
             case PMBUS_I2C_STATUS_SLA_W_ACK:
                 if (g_write_frame_pending != 0U)
                 {
+                    pmbus_drv_restore_pending_request_context();
                     pmbus_drv_process_frame(0U);
                     pmbus_drv_reset_rx();
                     g_write_frame_pending = 0U;
                     g_write_frame_pending_tick = 0UL;
                 }
+                pmbus_drv_update_request_target();
                 pmbus_drv_reset_rx();
                 pmbus_drv_reset_tx();
                 g_prefetched_read_valid = 0U;
@@ -1743,10 +2177,28 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 {
                     pmbus_frame_class_t frame_class;
 
-                    frame_class = pmbus_drv_classify_current_frame();
-                    if (frame_class == PMBUS_FRAME_CLASS_WRITE_ONLY)
+                    if (g_request_target == PMBUS_REQUEST_TARGET_ARP)
                     {
-                        pmbus_drv_process_frame(0U);
+                        if ((g_rx_buffer[0] == PMBUS_ARP_COMMAND_GET_UDID) ||
+                            (g_rx_buffer[0] == PMBUS_ARP_COMMAND_DIRECTED_GET_UDID))
+                        {
+                            pmbus_drv_save_pending_request_context();
+                            g_write_frame_pending = 1U;
+                            g_write_frame_pending_tick = get_tick();
+                            g_read_response_ready = 0U;
+                        }
+                        else
+                        {
+                            pmbus_drv_process_arp_frame(0U);
+                            pmbus_drv_reset_rx();
+                            g_write_frame_pending = 0U;
+                            g_write_frame_pending_tick = 0UL;
+                            g_read_response_ready = 0U;
+                        }
+                    }
+                    else if (g_request_target == PMBUS_REQUEST_TARGET_ZONE_WRITE)
+                    {
+                        pmbus_drv_process_zone_write_frame(0U);
                         pmbus_drv_reset_rx();
                         g_write_frame_pending = 0U;
                         g_write_frame_pending_tick = 0UL;
@@ -1754,19 +2206,32 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                     }
                     else
                     {
-                        /*
-                            A command-only frame for a read-capable command is not
-                            sufficient to prove a legal read transaction yet. Keep
-                            it pending and only commit to the read path when the
-                            master really issues SLA+R. If the next event is a new
-                            SLA+W instead, the pending frame will be processed as a
-                            write-side illegal transaction and STATUS_CML can latch
-                            INVALID_OR_UNSUPPORTED_DATA as required by the PMBus
-                            validation checklist.
-                        */
-                        g_write_frame_pending = 1U;
-                        g_write_frame_pending_tick = get_tick();
-                        g_read_response_ready = 0U;
+                        frame_class = pmbus_drv_classify_current_frame();
+                        if (frame_class == PMBUS_FRAME_CLASS_WRITE_ONLY)
+                        {
+                            pmbus_drv_process_frame(0U);
+                            pmbus_drv_reset_rx();
+                            g_write_frame_pending = 0U;
+                            g_write_frame_pending_tick = 0UL;
+                            g_read_response_ready = 0U;
+                        }
+                        else
+                        {
+                            /*
+                                A command-only frame for a read-capable command is not
+                                sufficient to prove a legal read transaction yet. Keep
+                                it pending and only commit to the read path when the
+                                master really issues SLA+R. If the next event is a new
+                                SLA+W instead, the pending frame will be processed as a
+                                write-side illegal transaction and STATUS_CML can latch
+                                INVALID_OR_UNSUPPORTED_DATA as required by the PMBus
+                                validation checklist.
+                            */
+                            pmbus_drv_save_pending_request_context();
+                            g_write_frame_pending = 1U;
+                            g_write_frame_pending_tick = get_tick();
+                            g_read_response_ready = 0U;
+                        }
                     }
                 }
                 pmbus_io_i2c_set_ack();
@@ -1774,9 +2239,27 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 break;
 
             case PMBUS_I2C_STATUS_SLA_R_ACK:
-                if (g_ara_alias_active != 0U)
+                pmbus_drv_update_request_target();
+                if (g_request_target == PMBUS_REQUEST_TARGET_ARA)
                 {
                     pmbus_drv_prepare_ara_response();
+                    pmbus_drv_load_next_tx_byte();
+                }
+                else if (g_request_target == PMBUS_REQUEST_TARGET_ARP)
+                {
+                    if (g_write_frame_pending != 0U)
+                    {
+                        pmbus_drv_restore_pending_request_context();
+                    }
+                    g_write_frame_pending = 0U;
+                    g_write_frame_pending_tick = 0UL;
+                    pmbus_drv_process_frame(1U);
+                    pmbus_drv_reset_rx();
+                    pmbus_drv_load_next_tx_byte();
+                }
+                else if (g_request_target == PMBUS_REQUEST_TARGET_ZONE_READ)
+                {
+                    pmbus_drv_prepare_zone_read_response();
                     pmbus_drv_load_next_tx_byte();
                 }
                 else if (g_read_response_ready != 0U)
@@ -1786,6 +2269,10 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 }
                 else if ((g_write_frame_pending != 0U) || (g_rx_length > 0U))
                 {
+                    if (g_write_frame_pending != 0U)
+                    {
+                        pmbus_drv_restore_pending_request_context();
+                    }
                     g_write_frame_pending = 0U;
                     g_write_frame_pending_tick = 0UL;
                     pmbus_drv_process_frame(1U);
@@ -1803,7 +2290,7 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
 
             case PMBUS_I2C_STATUS_DATA_TX_ACK:
                 pmbus_drv_load_next_tx_byte();
-                if ((g_ara_alias_active != 0U) && (g_tx_index >= g_tx_length))
+                if ((g_request_target == PMBUS_REQUEST_TARGET_ARA) && (g_tx_index >= g_tx_length))
                 {
                     pmbus_io_i2c_clear_ack();
                 }
@@ -1824,13 +2311,20 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 g_read_response_ready = 0U;
                 pmbus_io_i2c_set_ack();
                 pmbus_io_i2c_disable_timeout_counter();
-                if (g_ara_alias_active != 0U)
+                if (g_request_target == PMBUS_REQUEST_TARGET_ARA)
                 {
                     pmbus_app_release_alert();
                     g_ara_alias_inhibit = 1U;
+#if PMBUS_I2C_ALIAS_SLOT_ARA == PMBUS_I2C_ALIAS_SLOT_DISABLED
                     pmbus_drv_restore_normal_address();
+#else
+                    g_ara_alias_active = 0U;
+                    pmbus_drv_configure_alias_addresses();
+#endif
                     pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARA_ALIAS, g_current_slave_address_7bit, 0U);
                 }
+                g_request_target = PMBUS_REQUEST_TARGET_NORMAL;
+                g_request_address_7bit = pmbus_app_get_slave_address_7bit();
                 break;
 
             case PMBUS_I2C_STATUS_BUS_ERROR:

@@ -16,7 +16,10 @@ Compliance target:
 
 Assumptions:
 - Addressing is documented in 7-bit form.
-- `PEC` means SMBus PEC is accepted/generated when `PMBUS_ENABLE_PEC = 1`.
+- `PEC` means SMBus PEC behavior follows `PMBUS_PEC_POLICY`:
+  - `PMBUS_PEC_POLICY_DISABLED`: no PEC is generated or accepted as an extra transaction byte.
+  - `PMBUS_PEC_POLICY_OPTIONAL`: host write PEC is accepted/validated when present; slave read PEC is generated.
+  - `PMBUS_PEC_POLICY_REQUIRED`: write-side transactions require valid host PEC; read-side transactions still generate slave PEC.
 - `Source Path` describes the internal data owner:
   - `Config shadow`: writable PMBus configuration shadow in `pmbus_app`
   - `Telemetry shadow`: encoded telemetry shadow refreshed in background
@@ -208,6 +211,7 @@ Recommended usage:
 - Unsupported commands are classified as `STATUS_CML.INVALID_OR_UNSUPPORTED_COMMAND_RECEIVED`.
 - Supported commands with malformed data or wrong transaction type are classified as `STATUS_CML.INVALID_OR_UNSUPPORTED_DATA_RECEIVED`.
 - `Repeated START` read paths and PEC handling are supported in the transport layer.
+- PMBus command capability is centralized in `pmbus_command_descriptor_t g_pmbus_command_descriptors[]`; parser, `QUERY`, and protocol detection must stay table-driven.
 - `QUERY (0x1A)` and `SMBALERT_MASK (0x1B)` now use explicit `Block Write-Read Process Call` handling in the slave dispatcher.
 - `USER_DATA_00..15`, unassigned `MFR_SPECIFIC_C4..FD`, and extended selectors are implemented as CRPS policy shadows so Table 31 host-visible dispatch coverage is complete.
 - The CRPS policy shadows are not final product behavior; bind each entry to NVM, real telemetry/control, or documented product ownership before production use.
@@ -235,14 +239,21 @@ Recommended usage:
 - `Group Command` note:
   - the Pico host can now emit grouped write transport without STOP between segments
   - this matrix claims transport compatibility, not yet a formal guarantee that every application-level side effect is deferred until the final STOP for every writable command
-- `ARA` is implemented as a portable alias strategy, not as a true hardware multi-address slave implementation.
+- `ARA` is implemented through the platform alias-address contract when the MCU has spare slave address slots.
   - ARA response supports both host read styles:
     - 1-byte no-PEC read: returns the alerting slave write address.
     - 2-byte PEC read: returns the alerting slave write address plus SMBus PEC over `ARA read address + response address`.
+  - On M031, the ARA alias is enabled only while ALERT# is asserted and not inhibited.
   - The first ARA response byte is loaded in the `SLA+R ACK` ISR path so the master does not read a stale previous TX byte.
   - The final ARA response byte clears the next ACK state so the controller reaches a transmit-finished status and releases the alias.
   - After ARA is served, the portable alias path is inhibited until ALERT# is actually deasserted; this keeps the normal PMBus address available for `STATUS_CML` / `CLEAR_FAULTS`.
   - The alias is released on the master NACK/STOP completion path.
+- `ARP` is implemented as a framework-level alias at `0x61`.
+  - `PREPARE_TO_ARP`, `GET_UDID`, `DIRECTED_GET_UDID`, `ASSIGN_ADDRESS`, and `RESET_DEVICE` are recognized.
+  - The 17-byte UDID is a product-data placeholder and must be bound to real manufacturing identity before production.
+- `Zone` support includes standard `ZONE_CONFIG (0x07)` and `ZONE_ACTIVE (0x08)` plus a portable Zone Read alias.
+  - M031 default alias allocation enables Zone Read at `0x28`.
+  - Zone Write alias is configured as disabled by default because M031 has only four slave address registers.
 - Fan command policy currently uses a portable heuristic:
   - warning when measured RPM falls below 90% of commanded target
   - fault when measured RPM falls below 80% of commanded target

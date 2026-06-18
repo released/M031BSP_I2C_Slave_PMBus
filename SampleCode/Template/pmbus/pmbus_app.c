@@ -11,20 +11,24 @@ typedef struct
     uint8_t operation;
     uint8_t on_off_config;
     uint8_t phase;
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
     uint8_t page_plus_last_page;
     uint8_t page_plus_last_command;
     uint8_t page_plus_last_length;
     uint8_t page_plus_last_payload[PMBUS_MAX_BLOCK_SIZE];
+#endif
     uint8_t store_restore_last_command;
     uint8_t store_restore_last_code;
     uint16_t store_restore_count;
     uint8_t write_protect;
+#if PMBUS_ENABLE_CMD_FAN
     uint8_t fan_config_1_2;
     uint16_t fan_command_1;
     uint16_t fan_command_2;
     uint8_t fan_config_3_4;
     uint16_t fan_command_3;
     uint16_t fan_command_4;
+#endif
     uint8_t vout_mode;
     uint16_t vout_ov_fault_limit;
     uint16_t vout_ov_warn_limit;
@@ -56,8 +60,10 @@ typedef struct
     uint8_t iin_oc_fault_response;
     uint8_t ton_max_fault_response;
     uint8_t pout_op_fault_response;
+#if (PMBUS_ENABLE_CMD_ZONE || PMBUS_ENABLE_ZONE_ALIAS)
     uint16_t zone_config;
     uint16_t zone_active;
+#endif
     uint16_t vout_command;
     uint16_t vout_trim;
     uint16_t vout_cal_offset;
@@ -69,7 +75,9 @@ typedef struct
     uint16_t vout_scale_loop;
     uint16_t vout_scale_monitor;
     uint16_t vout_min;
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
     uint8_t coefficients[5];
+#endif
     uint16_t pout_max;
     uint16_t max_duty;
     uint16_t frequency_switch;
@@ -120,8 +128,11 @@ typedef struct
     uint8_t comm_recover_count;
     uint8_t comm_recover_fail_count;
     uint8_t comm_bus_released;
+#if PMBUS_ENABLE_CMD_MFR_EXT
     uint8_t blackbox_latched;
     uint8_t mfr_cold_redundancy_config;
+#endif
+#if PMBUS_ENABLE_CMD_FWUPLOAD
     uint8_t mfr_fwupload_mode;
     uint16_t mfr_fwupload_status;
     uint8_t mfr_fwupload_last_block[PMBUS_MAX_BLOCK_SIZE];
@@ -130,6 +141,7 @@ typedef struct
     uint16_t mfr_fwupload_expected_sequence;
     uint16_t mfr_fwupload_last_sequence;
     uint8_t mfr_fwupload_final_seen;
+#endif
     uint32_t source_vin_mv;
     uint32_t source_iin_ma;
     uint32_t source_vout_mv;
@@ -137,8 +149,10 @@ typedef struct
     uint32_t source_temp1_mc;
     uint32_t source_temp2_mc;
     uint32_t source_temp3_mc;
+#if PMBUS_ENABLE_CMD_FAN
     uint32_t source_fan1_rpm;
     uint32_t source_fan2_rpm;
+#endif
     uint32_t source_pout_mw;
     uint32_t source_pin_mw;
     uint16_t read_vin;
@@ -148,20 +162,28 @@ typedef struct
     uint16_t read_temperature_1;
     uint16_t read_temperature_2;
     uint16_t read_temperature_3;
+#if PMBUS_ENABLE_CMD_FAN
     uint16_t read_fan_speed_1;
     uint16_t read_fan_speed_2;
+#endif
     uint16_t read_pout;
     uint16_t read_pin;
+#if PMBUS_ENABLE_CMD_ENERGY
     uint8_t read_ein[6];
     uint8_t read_eout[6];
+#endif
+#if PMBUS_ENABLE_CMD_MFR_EXT
     uint8_t mfr_blackbox_live[PMBUS_BLACKBOX_BLOCK_SIZE];
     uint8_t mfr_blackbox_latched[PMBUS_BLACKBOX_BLOCK_SIZE];
+#endif
+#if PMBUS_ENABLE_CMD_ENERGY
     uint16_t ein_accumulator;
     uint16_t eout_accumulator;
     uint8_t ein_rollover_count;
     uint8_t eout_rollover_count;
     uint32_t ein_sample_count;
     uint32_t eout_sample_count;
+#endif
 } pmbus_app_store_t;
 
 static pmbus_app_store_t g_pmbus_app;
@@ -175,11 +197,15 @@ static uint8_t g_mfr_revision[] = "MFR_REV_001";
 static uint8_t g_mfr_serial[] = "MFR_SERIAL_001";
 
 static void pmbus_app_copy_bytes(uint8_t *dst, uint8_t *src, uint8_t length);
+#if PMBUS_ENABLE_CMD_ENERGY
 static uint16_t pmbus_app_compute_energy_step(uint32_t power_mw);
+#endif
 static void pmbus_app_update_fault_register(uint8_t *reg_value, uint8_t set_mask, uint8_t clear_mask);
 static uint8_t pmbus_app_apply_fault_source_policy(uint8_t current_status, uint8_t source_status, uint8_t fault_mask);
 static void pmbus_app_sync_alert_policy(void);
+#if PMBUS_ENABLE_CMD_MFR_EXT
 static void pmbus_app_refresh_blackbox_snapshot(void);
+#endif
 static void pmbus_app_refresh_status_and_optional_latch(uint8_t latch_on_fault);
 static uint8_t pmbus_app_map_address_strap_to_7bit(uint8_t a0_level, uint8_t a1_level);
 
@@ -193,6 +219,7 @@ static void pmbus_app_copy_bytes(uint8_t *dst, uint8_t *src, uint8_t length)
     }
 }
 
+#if PMBUS_ENABLE_CMD_ENERGY
 static uint16_t pmbus_app_compute_energy_step(uint32_t power_mw)
 {
     uint32_t sample_step;
@@ -210,6 +237,7 @@ static uint16_t pmbus_app_compute_energy_step(uint32_t power_mw)
 
     return (uint16_t)sample_step;
 }
+#endif
 
 static void pmbus_app_update_fault_register(uint8_t *reg_value, uint8_t set_mask, uint8_t clear_mask)
 {
@@ -500,22 +528,32 @@ static void pmbus_app_refresh_status_word(void)
 {
     uint8_t status_byte;
     uint16_t status_word;
+#if PMBUS_ENABLE_CMD_FWUPLOAD
     uint16_t mfr_status_bits;
+#endif
     uint8_t has_other_summary;
     uint8_t has_mfr_summary;
 
     status_byte = 0U;
     status_word = 0U;
+#if PMBUS_ENABLE_CMD_FWUPLOAD
     mfr_status_bits = (uint16_t)(PMBUS_FWUPLOAD_STATUS_BAD_IMAGE | PMBUS_FWUPLOAD_STATUS_UNSUPPORTED);
+#endif
     has_other_summary = 0U;
     has_mfr_summary = 0U;
 
-    if ((g_pmbus_app.busy_state != 0U) ||
-        ((g_pmbus_app.mfr_fwupload_mode & 0x01U) != 0U) ||
+    if (g_pmbus_app.busy_state != 0U)
+    {
+        status_byte = (uint8_t)(status_byte | PMBUS_STATUS_BYTE_BUSY);
+    }
+
+#if PMBUS_ENABLE_CMD_FWUPLOAD
+    if (((g_pmbus_app.mfr_fwupload_mode & 0x01U) != 0U) ||
         ((g_pmbus_app.mfr_fwupload_status & PMBUS_FWUPLOAD_STATUS_IN_PROGRESS) != 0U))
     {
         status_byte = (uint8_t)(status_byte | PMBUS_STATUS_BYTE_BUSY);
     }
+#endif
 
     if ((g_pmbus_app.operation & 0x80U) == 0U)
     {
@@ -585,10 +623,12 @@ static void pmbus_app_refresh_status_word(void)
         has_mfr_summary = 1U;
     }
 
+#if PMBUS_ENABLE_CMD_FWUPLOAD
     if ((g_pmbus_app.mfr_fwupload_status & mfr_status_bits) != 0U)
     {
         has_mfr_summary = 1U;
     }
+#endif
 
     if (g_pmbus_app.mfr_fault_active != 0U)
     {
@@ -624,6 +664,7 @@ static void pmbus_app_refresh_status_word(void)
     g_pmbus_app.status_word = status_word;
 }
 
+#if PMBUS_ENABLE_CMD_ENERGY
 static void pmbus_app_update_energy_shadow(uint8_t *buffer,
     uint16_t *accumulator,
     uint8_t *rollover_count,
@@ -649,7 +690,9 @@ static void pmbus_app_update_energy_shadow(uint8_t *buffer,
     buffer[4] = (uint8_t)((*sample_count >> 8) & 0x0000FFUL);
     buffer[5] = (uint8_t)((*sample_count >> 16) & 0x0000FFUL);
 }
+#endif
 
+#if PMBUS_ENABLE_CMD_MFR_EXT
 static void pmbus_app_refresh_blackbox_snapshot(void)
 {
     g_pmbus_app.mfr_blackbox_live[0] = 0x02U;
@@ -674,10 +717,17 @@ static void pmbus_app_refresh_blackbox_snapshot(void)
     g_pmbus_app.mfr_blackbox_live[19] = (uint8_t)((g_pmbus_app.read_temperature_2 >> 8) & 0x00FFU);
     g_pmbus_app.mfr_blackbox_live[20] = (uint8_t)(g_pmbus_app.read_temperature_3 & 0x00FFU);
     g_pmbus_app.mfr_blackbox_live[21] = (uint8_t)((g_pmbus_app.read_temperature_3 >> 8) & 0x00FFU);
+#if PMBUS_ENABLE_CMD_FAN
     g_pmbus_app.mfr_blackbox_live[22] = (uint8_t)(g_pmbus_app.read_fan_speed_1 & 0x00FFU);
     g_pmbus_app.mfr_blackbox_live[23] = (uint8_t)((g_pmbus_app.read_fan_speed_1 >> 8) & 0x00FFU);
     g_pmbus_app.mfr_blackbox_live[24] = (uint8_t)(g_pmbus_app.read_fan_speed_2 & 0x00FFU);
     g_pmbus_app.mfr_blackbox_live[25] = (uint8_t)((g_pmbus_app.read_fan_speed_2 >> 8) & 0x00FFU);
+#else
+    g_pmbus_app.mfr_blackbox_live[22] = 0U;
+    g_pmbus_app.mfr_blackbox_live[23] = 0U;
+    g_pmbus_app.mfr_blackbox_live[24] = 0U;
+    g_pmbus_app.mfr_blackbox_live[25] = 0U;
+#endif
     g_pmbus_app.mfr_blackbox_live[26] = (uint8_t)(g_pmbus_app.read_pin & 0x00FFU);
     g_pmbus_app.mfr_blackbox_live[27] = (uint8_t)((g_pmbus_app.read_pin >> 8) & 0x00FFU);
     g_pmbus_app.mfr_blackbox_live[28] = (uint8_t)(g_pmbus_app.read_pout & 0x00FFU);
@@ -690,11 +740,13 @@ static void pmbus_app_refresh_blackbox_snapshot(void)
     g_pmbus_app.mfr_blackbox_live[31] = (uint8_t)(((g_pmbus_app.comm_recover_count & 0x0FU) << 4) |
         (g_pmbus_app.comm_last_recover_reason & 0x0FU));
 }
+#endif
 
 static void pmbus_app_refresh_status_and_optional_latch(uint8_t latch_on_fault)
 {
     pmbus_app_refresh_status_word();
     pmbus_app_sync_alert_policy();
+#if PMBUS_ENABLE_CMD_MFR_EXT
     pmbus_app_refresh_blackbox_snapshot();
 
     if ((latch_on_fault != 0U) && (g_pmbus_app.blackbox_latched == 0U))
@@ -704,18 +756,24 @@ static void pmbus_app_refresh_status_and_optional_latch(uint8_t latch_on_fault)
             PMBUS_BLACKBOX_BLOCK_SIZE);
         g_pmbus_app.blackbox_latched = 1U;
     }
+#else
+    latch_on_fault = latch_on_fault;
+#endif
 }
 
 static void pmbus_app_refresh_shadow_data(void)
 {
     signed char vout_exponent;
+#if PMBUS_ENABLE_CMD_ENERGY
     uint16_t ein_sample_step;
     uint16_t eout_sample_step;
+#endif
     uint8_t effective_vout_source;
     uint8_t effective_iout_source;
     uint8_t effective_input_source;
     uint8_t effective_temperature_source;
     uint8_t effective_fans_source;
+#if PMBUS_ENABLE_CMD_LIMITS
     uint32_t vout_ov_fault_limit_mv;
     uint32_t vout_ov_warn_limit_mv;
     uint32_t vout_uv_warn_limit_mv;
@@ -730,9 +788,12 @@ static void pmbus_app_refresh_shadow_data(void)
     long iin_oc_warn_limit_ma;
     long ot_fault_limit_mc;
     long ot_warn_limit_mc;
+    uint32_t hottest_temp_mc;
+#endif
+#if PMBUS_ENABLE_CMD_FAN
     long fan_command_1_rpm;
     long fan_command_2_rpm;
-    uint32_t hottest_temp_mc;
+#endif
 
     vout_exponent = pmbus_app_decode_vout_exponent(g_pmbus_app.vout_mode);
 
@@ -743,8 +804,10 @@ static void pmbus_app_refresh_shadow_data(void)
     g_pmbus_app.read_temperature_1 = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_temp1_mc, 1000U);
     g_pmbus_app.read_temperature_2 = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_temp2_mc, 1000U);
     g_pmbus_app.read_temperature_3 = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_temp3_mc, 1000U);
+#if PMBUS_ENABLE_CMD_FAN
     g_pmbus_app.read_fan_speed_1 = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_fan1_rpm, 1U);
     g_pmbus_app.read_fan_speed_2 = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_fan2_rpm, 1U);
+#endif
     g_pmbus_app.read_pout = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_pout_mw, 1000U);
     g_pmbus_app.read_pin = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_pin_mw, 1000U);
 
@@ -754,6 +817,12 @@ static void pmbus_app_refresh_shadow_data(void)
     effective_temperature_source = g_pmbus_app.status_temperature_source;
     effective_fans_source = g_pmbus_app.status_fans_1_2_source;
 
+#if PMBUS_ENABLE_CMD_FAN
+    fan_command_1_rpm = pmbus_app_decode_linear11_scaled(g_pmbus_app.fan_command_1, 1U);
+    fan_command_2_rpm = pmbus_app_decode_linear11_scaled(g_pmbus_app.fan_command_2, 1U);
+#endif
+
+#if PMBUS_ENABLE_CMD_LIMITS
     vout_ov_fault_limit_mv = pmbus_app_decode_ulinear16_to_mv(g_pmbus_app.vout_ov_fault_limit, vout_exponent);
     vout_ov_warn_limit_mv = pmbus_app_decode_ulinear16_to_mv(g_pmbus_app.vout_ov_warn_limit, vout_exponent);
     vout_uv_warn_limit_mv = pmbus_app_decode_ulinear16_to_mv(g_pmbus_app.vout_uv_warn_limit, vout_exponent);
@@ -768,8 +837,6 @@ static void pmbus_app_refresh_shadow_data(void)
     iin_oc_warn_limit_ma = pmbus_app_decode_linear11_scaled(g_pmbus_app.iin_oc_warn_limit, 1000U);
     ot_fault_limit_mc = pmbus_app_decode_linear11_scaled(g_pmbus_app.ot_fault_limit, 1000U);
     ot_warn_limit_mc = pmbus_app_decode_linear11_scaled(g_pmbus_app.ot_warn_limit, 1000U);
-    fan_command_1_rpm = pmbus_app_decode_linear11_scaled(g_pmbus_app.fan_command_1, 1U);
-    fan_command_2_rpm = pmbus_app_decode_linear11_scaled(g_pmbus_app.fan_command_2, 1U);
 
     if (g_pmbus_app.source_vout_mv >= vout_ov_fault_limit_mv)
     {
@@ -843,7 +910,9 @@ static void pmbus_app_refresh_shadow_data(void)
     {
         effective_temperature_source = (uint8_t)(effective_temperature_source | PMBUS_STATUS_TEMPERATURE_OT_WARNING);
     }
+#endif
 
+#if PMBUS_ENABLE_CMD_FAN
     if (fan_command_1_rpm > 0L)
     {
         if ((long)g_pmbus_app.source_fan1_rpm < ((fan_command_1_rpm * 8L) / 10L))
@@ -867,7 +936,9 @@ static void pmbus_app_refresh_shadow_data(void)
             effective_fans_source = (uint8_t)(effective_fans_source | PMBUS_STATUS_FANS_1_2_FAN_2_WARNING);
         }
     }
+#endif
 
+#if PMBUS_ENABLE_CMD_ENERGY
     ein_sample_step = pmbus_app_compute_energy_step(g_pmbus_app.source_pin_mw);
     eout_sample_step = pmbus_app_compute_energy_step(g_pmbus_app.source_pout_mw);
 
@@ -882,6 +953,7 @@ static void pmbus_app_refresh_shadow_data(void)
         &g_pmbus_app.eout_rollover_count,
         &g_pmbus_app.eout_sample_count,
         eout_sample_step);
+#endif
 
     g_pmbus_app.status_vout = pmbus_app_apply_fault_source_policy(g_pmbus_app.status_vout,
         effective_vout_source,
@@ -920,16 +992,21 @@ void pmbus_app_init(void)
     g_pmbus_app.operation = 0x80U;
     g_pmbus_app.on_off_config = 0x1AU;
     g_pmbus_app.phase = 0x00U;
-    /* PAGE_PLUS_* and STORE/RESTORE are portable host-compatibility shadows.
-       TODO: Bind PAGE_PLUS to real multi-page rails and STORE/RESTORE to
-       product NVM with wear/error policy before relying on persistence. */
+    /* STORE/RESTORE is a portable host-compatibility shadow.
+       TODO: Bind STORE/RESTORE to product NVM with wear/error policy before
+       relying on persistence. */
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
+    /* PAGE_PLUS is a portable host-compatibility shadow.
+       TODO: Bind PAGE_PLUS to real multi-page rails before production use. */
     g_pmbus_app.page_plus_last_page = 0x00U;
     g_pmbus_app.page_plus_last_command = 0x00U;
     g_pmbus_app.page_plus_last_length = 0x00U;
+#endif
     g_pmbus_app.store_restore_last_command = 0x00U;
     g_pmbus_app.store_restore_last_code = 0x00U;
     g_pmbus_app.store_restore_count = 0x0000U;
     g_pmbus_app.write_protect = 0x00U;
+#if PMBUS_ENABLE_CMD_FAN
     /* Fan 1/2 defaults are portable telemetry-policy test values.
        TODO: Replace with real fan controller/tachometer integration. */
     g_pmbus_app.fan_config_1_2 = 0x00U;
@@ -940,9 +1017,11 @@ void pmbus_app_init(void)
     g_pmbus_app.fan_config_3_4 = 0x00U;
     g_pmbus_app.fan_command_3 = 0x0000U;
     g_pmbus_app.fan_command_4 = 0x0000U;
+#endif
     /* VOUT_MODE and limit defaults are portable CRPS-like placeholder values.
        TODO: Replace or validate against final PSU voltage/current limits. */
     g_pmbus_app.vout_mode = 0x17U;
+#if PMBUS_ENABLE_CMD_LIMITS
     g_pmbus_app.vout_ov_fault_limit = pmbus_app_encode_ulinear16_from_mv(13200U, -9);
     g_pmbus_app.vout_ov_warn_limit = pmbus_app_encode_ulinear16_from_mv(12600U, -9);
     g_pmbus_app.vout_uv_warn_limit = pmbus_app_encode_ulinear16_from_mv(11400U, -9);
@@ -975,11 +1054,15 @@ void pmbus_app_init(void)
     g_pmbus_app.iin_oc_fault_response = 0x00U;
     g_pmbus_app.ton_max_fault_response = 0x00U;
     g_pmbus_app.pout_op_fault_response = 0x00U;
+#endif
+#if (PMBUS_ENABLE_CMD_ZONE || PMBUS_ENABLE_ZONE_ALIAS)
     g_pmbus_app.zone_config = 0x0000U;
     g_pmbus_app.zone_active = 0x0000U;
+#endif
     /* VOUT programming commands are stable read/write shadows for host
        validation. TODO: Connect writes to the real voltage-loop owner. */
     g_pmbus_app.vout_command = 0x1800U;
+#if PMBUS_ENABLE_CMD_LIMITS
     g_pmbus_app.vout_trim = 0x0000U;
     g_pmbus_app.vout_cal_offset = 0x0000U;
     g_pmbus_app.vout_max = pmbus_app_encode_ulinear16_from_mv(13200U, -9);
@@ -990,6 +1073,7 @@ void pmbus_app_init(void)
     g_pmbus_app.vout_scale_loop = 0x0000U;
     g_pmbus_app.vout_scale_monitor = 0x0000U;
     g_pmbus_app.vout_min = pmbus_app_encode_ulinear16_from_mv(10800U, -9);
+#endif
     /* Fixed/shadow Table 31 expansion values:
        COEFFICIENTS, POUT_MAX, MAX_DUTY, FREQUENCY_SWITCH, POWER_MODE,
        VIN_ON, VIN_OFF, INTERLEAVE, IOUT_CAL_GAIN, IOUT_CAL_OFFSET,
@@ -998,15 +1082,20 @@ void pmbus_app_init(void)
        POUT_OP_FAULT_LIMIT, POUT_OP_WARN_LIMIT, PIN_OP_WARN_LIMIT.
        TODO: Replace these portable values with real CRPS control-loop,
        telemetry, calibration, sequencer, and DIRECT-format coefficient data. */
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
     g_pmbus_app.coefficients[0] = 0x01U;
     g_pmbus_app.coefficients[1] = 0x00U;
     g_pmbus_app.coefficients[2] = 0x00U;
     g_pmbus_app.coefficients[3] = 0x00U;
     g_pmbus_app.coefficients[4] = 0x00U;
+#endif
+#if PMBUS_ENABLE_CMD_LIMITS
     g_pmbus_app.pout_max = pmbus_app_encode_linear11_scaled(300000L, 1000U);
     g_pmbus_app.max_duty = pmbus_app_encode_linear11_scaled(100000L, 1000U);
+#endif
     g_pmbus_app.frequency_switch = pmbus_app_encode_linear11_scaled(100000L, 1U);
     g_pmbus_app.power_mode = 0x00U;
+#if PMBUS_ENABLE_CMD_LIMITS
     g_pmbus_app.vin_on = pmbus_app_encode_linear11_scaled(180000L, 1000U);
     g_pmbus_app.vin_off = pmbus_app_encode_linear11_scaled(170000L, 1000U);
     g_pmbus_app.interleave = 0x0000U;
@@ -1023,6 +1112,7 @@ void pmbus_app_init(void)
     g_pmbus_app.pout_op_fault_limit = pmbus_app_encode_linear11_scaled(320000L, 1000U);
     g_pmbus_app.pout_op_warn_limit = pmbus_app_encode_linear11_scaled(300000L, 1000U);
     g_pmbus_app.pin_op_warn_limit = pmbus_app_encode_linear11_scaled(330000L, 1000U);
+#endif
     g_pmbus_app.smbalert_mask = 0x0000U;
     /* Status command defaults are zero/idle until platform status or PMBus
        fault handlers update them. Commands affected: STATUS_BYTE,
@@ -1047,7 +1137,6 @@ void pmbus_app_init(void)
     g_pmbus_app.status_other_source = 0x00U;
     g_pmbus_app.status_mfr_specific_source = 0x00U;
     g_pmbus_app.status_fans_1_2_source = 0x00U;
-    g_pmbus_app.blackbox_latched = 0U;
     g_pmbus_app.busy_state = 0U;
     g_pmbus_app.power_good_asserted = 1U;
     g_pmbus_app.mfr_fault_active = 0U;
@@ -1055,9 +1144,15 @@ void pmbus_app_init(void)
     g_pmbus_app.comm_recover_count = 0U;
     g_pmbus_app.comm_recover_fail_count = 0U;
     g_pmbus_app.comm_bus_released = 1U;
+#if PMBUS_ENABLE_CMD_MFR_EXT
+    g_pmbus_app.blackbox_latched = 0U;
     /* Vendor command defaults are portable test shadows.
        TODO: Replace with production cold-redundancy and firmware-upload policy. */
     g_pmbus_app.mfr_cold_redundancy_config = 0x00U;
+#endif
+#if PMBUS_ENABLE_CMD_FWUPLOAD
+    /* Firmware upload defaults are protocol placeholders only.
+       TODO: Replace with a product bootloader/storage implementation. */
     g_pmbus_app.mfr_fwupload_mode = 0x00U;
     g_pmbus_app.mfr_fwupload_status = 0x0000U;
     g_pmbus_app.mfr_fwupload_last_block_len = 0U;
@@ -1065,6 +1160,7 @@ void pmbus_app_init(void)
     g_pmbus_app.mfr_fwupload_expected_sequence = 0U;
     g_pmbus_app.mfr_fwupload_last_sequence = 0U;
     g_pmbus_app.mfr_fwupload_final_seen = 0U;
+#endif
 #if PMBUS_ENABLE_PEC
     /* CAPABILITY advertises PEC support based on build-time configuration.
        TODO: Keep this aligned with any future runtime PEC mode policy. */
@@ -1075,12 +1171,14 @@ void pmbus_app_init(void)
     g_pmbus_app.capability = 0x00U;
 #endif
     g_pmbus_app.alert_asserted = 0U;
+#if PMBUS_ENABLE_CMD_ENERGY
     g_pmbus_app.ein_accumulator = 0U;
     g_pmbus_app.eout_accumulator = 0U;
     g_pmbus_app.ein_rollover_count = 0U;
     g_pmbus_app.eout_rollover_count = 0U;
     g_pmbus_app.ein_sample_count = 0UL;
     g_pmbus_app.eout_sample_count = 0UL;
+#endif
     /* Default telemetry fallback values used until pmbus_platform_status_reader
        or measurement tasks update the sources. Commands affected:
        READ_VIN, READ_IIN, READ_VOUT, READ_IOUT, READ_TEMPERATURE_1/2/3,
@@ -1093,8 +1191,10 @@ void pmbus_app_init(void)
     g_pmbus_app.source_temp1_mc = 35000UL;
     g_pmbus_app.source_temp2_mc = 43000UL;
     g_pmbus_app.source_temp3_mc = 50000UL;
+#if PMBUS_ENABLE_CMD_FAN
     g_pmbus_app.source_fan1_rpm = 12000UL;
     g_pmbus_app.source_fan2_rpm = 11800UL;
+#endif
     g_pmbus_app.source_pout_mw = 222000UL;
     g_pmbus_app.source_pin_mw = 276000UL;
 
@@ -1199,8 +1299,10 @@ void pmbus_app_clear_faults(void)
     g_pmbus_app.status_mfr_specific = (uint8_t)(g_pmbus_app.status_mfr_specific_source & (uint8_t)(~PMBUS_STATUS_MFR_SPECIFIC_FAULT_MASK));
     g_pmbus_app.status_fans_1_2 = (uint8_t)(g_pmbus_app.status_fans_1_2_source & (uint8_t)(~PMBUS_STATUS_FANS_1_2_FAULT_MASK));
     g_pmbus_app.mfr_fault_active = 0U;
+#if PMBUS_ENABLE_CMD_FWUPLOAD
     g_pmbus_app.mfr_fwupload_status = (uint16_t)(g_pmbus_app.mfr_fwupload_status &
         (uint16_t)(PMBUS_FWUPLOAD_STATUS_COMPLETE | PMBUS_FWUPLOAD_STATUS_IN_PROGRESS));
+#endif
     pmbus_app_release_alert();
     pmbus_app_refresh_status_and_optional_latch(0U);
 }
@@ -1652,11 +1754,13 @@ void pmbus_app_set_cml_fault_sources(unsigned char invalid_or_unsupported_comman
 
 void pmbus_app_latch_blackbox(void)
 {
+#if PMBUS_ENABLE_CMD_MFR_EXT
     pmbus_app_refresh_status_and_optional_latch(0U);
     pmbus_app_copy_bytes(g_pmbus_app.mfr_blackbox_latched,
         g_pmbus_app.mfr_blackbox_live,
         PMBUS_BLACKBOX_BLOCK_SIZE);
     g_pmbus_app.blackbox_latched = 1U;
+#endif
 }
 
 void pmbus_app_update_input_source(unsigned long vin_mv, unsigned long iin_ma, unsigned long pin_mw)
@@ -1682,8 +1786,13 @@ void pmbus_app_update_temperature_source(unsigned long temp1_mc, unsigned long t
 
 void pmbus_app_update_fan_source(unsigned long fan1_rpm, unsigned long fan2_rpm)
 {
+#if PMBUS_ENABLE_CMD_FAN
     g_pmbus_app.source_fan1_rpm = (uint32_t)fan1_rpm;
     g_pmbus_app.source_fan2_rpm = (uint32_t)fan2_rpm;
+#else
+    fan1_rpm = fan1_rpm;
+    fan2_rpm = fan2_rpm;
+#endif
 }
 
 uint8_t pmbus_app_get_page(void)
@@ -1698,6 +1807,7 @@ void pmbus_app_set_page(uint8_t value)
 
 void pmbus_app_record_page_plus_write(uint8_t page, uint8_t command, uint8_t *data_ptr, uint8_t length)
 {
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
     uint8_t index;
 
     if (length > PMBUS_MAX_BLOCK_SIZE)
@@ -1720,13 +1830,24 @@ void pmbus_app_record_page_plus_write(uint8_t page, uint8_t command, uint8_t *da
             g_pmbus_app.page_plus_last_payload[index] = 0x00U;
         }
     }
+#else
+    page = page;
+    command = command;
+    data_ptr = data_ptr;
+    length = length;
+#endif
 }
 
 void pmbus_app_record_page_plus_read(uint8_t page, uint8_t command)
 {
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
     g_pmbus_app.page_plus_last_page = page;
     g_pmbus_app.page_plus_last_command = command;
     g_pmbus_app.page_plus_last_length = 0U;
+#else
+    page = page;
+    command = command;
+#endif
 }
 
 void pmbus_app_record_store_restore(uint8_t command, uint8_t code)
@@ -1777,6 +1898,7 @@ void pmbus_app_set_write_protect(uint8_t value)
     g_pmbus_app.write_protect = value;
 }
 
+#if PMBUS_ENABLE_CMD_FAN
 uint8_t pmbus_app_get_fan_config_1_2(void)
 {
     return g_pmbus_app.fan_config_1_2;
@@ -1838,6 +1960,7 @@ void pmbus_app_set_fan_command_4(uint16_t value)
 {
     g_pmbus_app.fan_command_4 = value;
 }
+#endif
 
 uint8_t pmbus_app_get_vout_mode(void)
 {
@@ -2166,22 +2289,38 @@ void pmbus_app_set_pout_op_fault_response(uint8_t value)
 
 uint16_t pmbus_app_get_zone_config(void)
 {
+#if (PMBUS_ENABLE_CMD_ZONE || PMBUS_ENABLE_ZONE_ALIAS)
     return g_pmbus_app.zone_config;
+#else
+    return 0U;
+#endif
 }
 
 void pmbus_app_set_zone_config(uint16_t value)
 {
+#if (PMBUS_ENABLE_CMD_ZONE || PMBUS_ENABLE_ZONE_ALIAS)
     g_pmbus_app.zone_config = value;
+#else
+    value = value;
+#endif
 }
 
 uint16_t pmbus_app_get_zone_active(void)
 {
+#if (PMBUS_ENABLE_CMD_ZONE || PMBUS_ENABLE_ZONE_ALIAS)
     return g_pmbus_app.zone_active;
+#else
+    return 0U;
+#endif
 }
 
 void pmbus_app_set_zone_active(uint16_t value)
 {
+#if (PMBUS_ENABLE_CMD_ZONE || PMBUS_ENABLE_ZONE_ALIAS)
     g_pmbus_app.zone_active = value;
+#else
+    value = value;
+#endif
 }
 
 uint16_t pmbus_app_get_vout_command(void)
@@ -2296,12 +2435,18 @@ void pmbus_app_set_vout_min(uint16_t value)
 
 uint8_t pmbus_app_get_coefficients(unsigned char requested_command, uint8_t **data_ptr)
 {
+#if PMBUS_ENABLE_CMD_PAGE_PLUS
     /* COEFFICIENTS currently returns one fixed DIRECT-format coefficient set
        for any requested command. TODO: Return command-specific coefficients
        if the product exposes DIRECT-format telemetry or config commands. */
     (void)requested_command;
     *data_ptr = g_pmbus_app.coefficients;
     return 5U;
+#else
+    requested_command = requested_command;
+    *data_ptr = 0;
+    return 0U;
+#endif
 }
 
 uint16_t pmbus_app_get_pout_max(void)
@@ -2514,6 +2659,7 @@ void pmbus_app_set_smbalert_mask(uint16_t value)
     g_pmbus_app.smbalert_mask = value;
 }
 
+#if PMBUS_ENABLE_CMD_MFR_EXT
 uint8_t pmbus_app_get_mfr_cold_redundancy_config(void)
 {
     return g_pmbus_app.mfr_cold_redundancy_config;
@@ -2523,7 +2669,9 @@ void pmbus_app_set_mfr_cold_redundancy_config(unsigned char value)
 {
     g_pmbus_app.mfr_cold_redundancy_config = value;
 }
+#endif
 
+#if PMBUS_ENABLE_CMD_FWUPLOAD
 uint8_t pmbus_app_get_mfr_fwupload_mode(void)
 {
     return g_pmbus_app.mfr_fwupload_mode;
@@ -2625,6 +2773,7 @@ uint8_t pmbus_app_store_mfr_fwupload_block(unsigned char *data_ptr, unsigned cha
 
     return 1U;
 }
+#endif
 
 uint8_t pmbus_app_get_capability(void)
 {
@@ -2681,6 +2830,7 @@ uint8_t pmbus_app_get_status_fans_1_2(void)
     return g_pmbus_app.status_fans_1_2;
 }
 
+#if PMBUS_ENABLE_CMD_ENERGY
 uint8_t pmbus_app_get_read_ein(uint8_t **data_ptr)
 {
     *data_ptr = g_pmbus_app.read_ein;
@@ -2692,6 +2842,7 @@ uint8_t pmbus_app_get_read_eout(uint8_t **data_ptr)
     *data_ptr = g_pmbus_app.read_eout;
     return 6U;
 }
+#endif
 
 uint16_t pmbus_app_get_read_vin(void)
 {
@@ -2728,6 +2879,7 @@ uint16_t pmbus_app_get_read_temperature_3(void)
     return g_pmbus_app.read_temperature_3;
 }
 
+#if PMBUS_ENABLE_CMD_FAN
 uint16_t pmbus_app_get_read_fan_speed_1(void)
 {
     return g_pmbus_app.read_fan_speed_1;
@@ -2737,6 +2889,7 @@ uint16_t pmbus_app_get_read_fan_speed_2(void)
 {
     return g_pmbus_app.read_fan_speed_2;
 }
+#endif
 
 uint16_t pmbus_app_get_read_pout(void)
 {
@@ -2780,6 +2933,7 @@ uint8_t pmbus_app_get_mfr_serial(uint8_t **data_ptr)
     return (uint8_t)(sizeof(g_mfr_serial) - 1U);
 }
 
+#if PMBUS_ENABLE_CMD_MFR_EXT
 uint8_t pmbus_app_get_mfr_blackbox(uint8_t **data_ptr)
 {
     if (g_pmbus_app.blackbox_latched != 0U)
@@ -2793,6 +2947,7 @@ uint8_t pmbus_app_get_mfr_blackbox(uint8_t **data_ptr)
 
     return PMBUS_BLACKBOX_BLOCK_SIZE;
 }
+#endif
 
 uint8_t pmbus_app_is_alert_asserted(void)
 {

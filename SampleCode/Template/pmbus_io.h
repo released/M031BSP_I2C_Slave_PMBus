@@ -24,14 +24,27 @@
       PMBUS_I2C_ALIAS_SLOT_DISABLED when a platform has no free slot.
     - pmbus_io_i2c_set_ack() and pmbus_io_i2c_clear_ack() must only control
       the next ACK/NACK response state.
-    - pmbus_io_i2c_timeout_flag() and pmbus_io_i2c_clear_timeout_flag() must
-      map to the platform timeout indication used by the slave recovery path.
+    - pmbus_io_i2c_timeout_flag() and pmbus_io_i2c_clear_timeout_flag() should
+      map to the platform timeout indication used by the slave recovery path
+      when such a timeout source exists. Targets without a usable timeout
+      source may implement them as no-op / return 0 and rely on bus-error,
+      watchdog, explicit bus-clear, and external validation.
+    - Do not assume hardware SMBus Bus Management / PEC registers exist.
+      Software PMBus/SMBus ports must not depend on BUSCTL/BUSTCTL/BUSSTS,
+      PKTSIZE/PKTCRC, BUSTOUT, or CLKTOUT.
     - pmbus_io_isr_enter() and pmbus_io_isr_exit() must preserve any required
       register-bank or special-function-page state for the target MCU.
     - Bus-clear GPIO helpers must temporarily release or drive the PMBus lines
       in open-drain compatible fashion.
     - board_config.h must provide the PMBUS_PORT_* macro contract used by the
-      platform layer, including:
+      platform layer. Prefer selecting a PMBUS_PORT_PROFILE in board_config.h
+      instead of editing PMBus protocol or dispatch files when moving to
+      another I2C instance or pin assignment.
+    - board_config.h should provide readable names for trace/debug:
+      PMBUS_PORT_I2C_NAME
+      PMBUS_PORT_SCL_PIN_NAME / PMBUS_PORT_SDA_PIN_NAME
+      PMBUS_PORT_ALERT_PIN_NAME
+    - Required platform actions include:
       PMBUS_PORT_I2C_ISR_PROTOTYPE
       PMBUS_PORT_INIT_I2C_PINS / PMBUS_PORT_INIT_ALERT_PIN /
       PMBUS_PORT_INIT_ADDRESS_PINS
@@ -65,6 +78,7 @@ void pmbus_io_alert_release(void);
 void pmbus_io_i2c_slave_open(unsigned char slave_address);
 void pmbus_io_i2c_slave_set_alias(unsigned char slot, unsigned char address_7bit, unsigned char enable_state);
 void pmbus_io_i2c_interrupt(unsigned char enable_state);
+void pmbus_io_i2c_irq_guard(unsigned char enable_state);
 void pmbus_io_i2c_timeout(unsigned char enable_state);
 void pmbus_io_i2c_clear_timeout_flag(void);
 void pmbus_io_i2c_si_check(void);

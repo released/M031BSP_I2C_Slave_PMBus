@@ -133,7 +133,7 @@ static const pmbus_command_descriptor_t g_pmbus_command_descriptors[] =
     PMBUS_DESC(PMBUS_COMMAND_VOUT_SCALE_MONITOR, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
     PMBUS_DESC(PMBUS_COMMAND_VOUT_MIN, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
 #endif
-#if PMBUS_ENABLE_CMD_PAGE_PLUS
+#if PMBUS_ENABLE_CMD_COEFFICIENTS
     PMBUS_DESC(PMBUS_COMMAND_COEFFICIENTS, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_BLOCK_WRITE_READ, 0x06U),
 #endif
 #if PMBUS_ENABLE_CMD_LIMITS
@@ -269,6 +269,9 @@ static const pmbus_command_descriptor_t g_pmbus_command_descriptors[] =
     PMBUS_DESC(PMBUS_COMMAND_MFR_TAMBIENT_MIN, PMBUS_RESP_WORD, 0U, 0x00U),
     PMBUS_DESC(PMBUS_COMMAND_MFR_EFFICIENCY_LL, PMBUS_RESP_BLOCK, 0U, 0x06U),
     PMBUS_DESC(PMBUS_COMMAND_MFR_EFFICIENCY_HL, PMBUS_RESP_BLOCK, 0U, 0x06U),
+#if PMBUS_ENABLE_CMD_CRPS
+    PMBUS_DESC(PMBUS_COMMAND_MFR_EFFICIENCY_DATA, PMBUS_RESP_BLOCK, 0U, 0x06U),
+#endif
     PMBUS_DESC(PMBUS_COMMAND_MFR_PIN_ACCURACY, PMBUS_RESP_BYTE, 0U, 0x04U),
     PMBUS_DESC(PMBUS_COMMAND_IC_DEVICE_ID, PMBUS_RESP_BLOCK, 0U, 0x07U),
     PMBUS_DESC(PMBUS_COMMAND_IC_DEVICE_REV, PMBUS_RESP_BLOCK, 0U, 0x07U),
@@ -276,11 +279,44 @@ static const pmbus_command_descriptor_t g_pmbus_command_descriptors[] =
     PMBUS_DESC(PMBUS_COMMAND_MFR_MAX_TEMP_2, PMBUS_RESP_WORD, 0U, 0x00U),
     PMBUS_DESC(PMBUS_COMMAND_MFR_MAX_TEMP_3, PMBUS_RESP_WORD, 0U, 0x00U),
     PMBUS_DESC(PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+#if PMBUS_ENABLE_CMD_CRPS
+    PMBUS_DESC(PMBUS_COMMAND_MFR_READ_CONFIG_FILE_SIZE, PMBUS_RESP_BLOCK, 0U, 0x06U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_READ_CONFIG_BLOCK_SIZE, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_READ_CONFIG_FILE, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_BLOCK_WRITE_READ, 0x06U),
+#endif
+    PMBUS_DESC(PMBUS_COMMAND_MFR_HW_COMPATIBILITY, PMBUS_RESP_WORD, 0U, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD_CAPABILITY, PMBUS_RESP_BYTE, 0U, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_FW_REVISION, PMBUS_RESP_BLOCK, 0U, 0x06U),
+#if PMBUS_ENABLE_CMD_CRPS
+    PMBUS_DESC(PMBUS_COMMAND_MFR_SPDM, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_BLOCK_WRITE_READ, 0x06U),
+#endif
+    PMBUS_DESC(PMBUS_COMMAND_MFR_FRU_PROTECTION, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_REAL_TIME_BLACK_BOX, PMBUS_RESP_BLOCK, PMBUS_CMD_FLAG_BLOCK_WRITE | PMBUS_CMD_FLAG_BLOCK_WRITE_READ, 0x06U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_SYSTEM_BLACK_BOX, PMBUS_RESP_BLOCK, PMBUS_CMD_FLAG_BLOCK_WRITE | PMBUS_CMD_FLAG_BLOCK_WRITE_READ, 0x06U),
+#if PMBUS_ENABLE_CMD_CRPS
+    PMBUS_DESC(PMBUS_COMMAND_MFR_BLACK_BOX_CONFIG, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_CLEAR_BLACK_BOX, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_LINE_STATUS, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_SYSTEM_LED_CNTL, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD_BLOCK_SIZE, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_EN_STATUS_SIMULATION_CMD, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_PEAK_CURRENT_RECORD, PMBUS_RESP_BLOCK, PMBUS_CMD_FLAG_BLOCK_WRITE, 0x06U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_COMPONENT_ID, PMBUS_RESP_BLOCK, 0U, 0x06U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_TOT_POUT_MAX, PMBUS_RESP_WORD, 0U, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_VOUT_MARGINING, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_OCWPL1_SETTING, PMBUS_RESP_BLOCK, PMBUS_CMD_FLAG_BLOCK_WRITE, 0x06U),
+#endif
+    PMBUS_DESC(PMBUS_COMMAND_MFR_PWOK_WARNING_TIME, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_MAX_IOUT_CAPABILITY, PMBUS_RESP_BLOCK, 0U, 0x06U),
+#if PMBUS_ENABLE_CMD_CRPS
+    PMBUS_DESC(PMBUS_COMMAND_MFR_FPC_MAIN_MIN_OFF_TIME, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_FPC_12VSB_MIN_OFF_TIME, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x00U),
+#endif
 #endif
 #if PMBUS_ENABLE_CMD_FWUPLOAD
     PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD_MODE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
     PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_BLOCK_WRITE, 0x06U),
-    PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD_STATUS, PMBUS_RESP_WORD, 0U, 0x07U),
+    PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD_STATUS, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x07U),
 #endif
 #if PMBUS_ENABLE_CMD_MFR_EXT
     PMBUS_DESC(PMBUS_COMMAND_MFR_BLACKBOX, PMBUS_RESP_BLOCK, 0U, 0x06U)
@@ -380,10 +416,35 @@ static uint8_t pmbus_dispatch_is_mfr_policy_block_command(uint8_t command)
     switch (command)
     {
         case PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG:
+        case PMBUS_COMMAND_MFR_READ_CONFIG_FILE_SIZE:
+        case PMBUS_COMMAND_MFR_READ_CONFIG_BLOCK_SIZE:
+        case PMBUS_COMMAND_MFR_READ_CONFIG_FILE:
+        case PMBUS_COMMAND_MFR_HW_COMPATIBILITY:
+        case PMBUS_COMMAND_MFR_FWUPLOAD_CAPABILITY:
         case PMBUS_COMMAND_MFR_FWUPLOAD_MODE:
         case PMBUS_COMMAND_MFR_FWUPLOAD:
         case PMBUS_COMMAND_MFR_FWUPLOAD_STATUS:
+        case PMBUS_COMMAND_MFR_FW_REVISION:
+        case PMBUS_COMMAND_MFR_SPDM:
+        case PMBUS_COMMAND_MFR_FRU_PROTECTION:
         case PMBUS_COMMAND_MFR_BLACKBOX:
+        case PMBUS_COMMAND_MFR_REAL_TIME_BLACK_BOX:
+        case PMBUS_COMMAND_MFR_SYSTEM_BLACK_BOX:
+        case PMBUS_COMMAND_MFR_BLACK_BOX_CONFIG:
+        case PMBUS_COMMAND_MFR_CLEAR_BLACK_BOX:
+        case PMBUS_COMMAND_MFR_LINE_STATUS:
+        case PMBUS_COMMAND_MFR_SYSTEM_LED_CNTL:
+        case PMBUS_COMMAND_MFR_FWUPLOAD_BLOCK_SIZE:
+        case PMBUS_COMMAND_MFR_EN_STATUS_SIMULATION_CMD:
+        case PMBUS_COMMAND_MFR_PEAK_CURRENT_RECORD:
+        case PMBUS_COMMAND_MFR_COMPONENT_ID:
+        case PMBUS_COMMAND_MFR_TOT_POUT_MAX:
+        case PMBUS_COMMAND_MFR_VOUT_MARGINING:
+        case PMBUS_COMMAND_MFR_OCWPL1_SETTING:
+        case PMBUS_COMMAND_MFR_PWOK_WARNING_TIME:
+        case PMBUS_COMMAND_MFR_MAX_IOUT_CAPABILITY:
+        case PMBUS_COMMAND_MFR_FPC_MAIN_MIN_OFF_TIME:
+        case PMBUS_COMMAND_MFR_FPC_12VSB_MIN_OFF_TIME:
             return 0U;
 
         default:
@@ -722,7 +783,26 @@ static uint8_t pmbus_dispatch_build_smbalert_mask_response(uint8_t *payload, uin
 {
     uint16_t value;
 
-    if ((payload == 0) || (data_len != 1U) || (payload[0] != 0U))
+    if (payload == 0)
+    {
+        return 0U;
+    }
+
+    if (data_len == 1U)
+    {
+        if (payload[0] != 0U)
+        {
+            return 0U;
+        }
+    }
+    else if (data_len == 2U)
+    {
+        if ((payload[0] != 1U) || (payload[1] != 0U))
+        {
+            return 0U;
+        }
+    }
+    else
     {
         return 0U;
     }
@@ -987,6 +1067,28 @@ static uint8_t pmbus_dispatch_build_byte_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG:
             tx_buffer[0] = pmbus_app_get_mfr_cold_redundancy_config();
             break;
+
+        case PMBUS_COMMAND_MFR_FWUPLOAD_CAPABILITY:
+            tx_buffer[0] = pmbus_app_get_mfr_fwupload_capability();
+            break;
+
+        case PMBUS_COMMAND_MFR_FRU_PROTECTION:
+            tx_buffer[0] = pmbus_app_get_mfr_fru_protection();
+            break;
+
+#if PMBUS_ENABLE_CMD_CRPS
+        case PMBUS_COMMAND_MFR_BLACK_BOX_CONFIG:
+            tx_buffer[0] = pmbus_app_get_mfr_black_box_config();
+            break;
+
+        case PMBUS_COMMAND_MFR_LINE_STATUS:
+            tx_buffer[0] = pmbus_app_get_mfr_line_status();
+            break;
+
+        case PMBUS_COMMAND_MFR_EN_STATUS_SIMULATION_CMD:
+            tx_buffer[0] = pmbus_app_get_mfr_en_status_simulation_cmd();
+            break;
+#endif
 #endif
 
 #if PMBUS_ENABLE_CMD_FWUPLOAD
@@ -1391,6 +1493,48 @@ static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_b
         case PMBUS_COMMAND_MFR_MAX_TEMP_3:
             value = pmbus_app_get_read_temperature_3();
             break;
+
+#if PMBUS_ENABLE_CMD_CRPS
+        case PMBUS_COMMAND_MFR_READ_CONFIG_BLOCK_SIZE:
+            value = pmbus_app_get_mfr_read_config_block_size();
+            break;
+#endif
+
+        case PMBUS_COMMAND_MFR_HW_COMPATIBILITY:
+            value = pmbus_app_get_mfr_hw_compatibility();
+            break;
+
+#if PMBUS_ENABLE_CMD_CRPS
+        case PMBUS_COMMAND_MFR_SYSTEM_LED_CNTL:
+            value = pmbus_app_get_mfr_system_led_cntl();
+            break;
+
+        case PMBUS_COMMAND_MFR_FWUPLOAD_BLOCK_SIZE:
+            value = pmbus_app_get_mfr_fwupload_block_size();
+            break;
+
+        case PMBUS_COMMAND_MFR_TOT_POUT_MAX:
+            value = pmbus_app_get_mfr_tot_pout_max();
+            break;
+
+        case PMBUS_COMMAND_MFR_VOUT_MARGINING:
+            value = pmbus_app_get_mfr_vout_margining();
+            break;
+#endif
+
+        case PMBUS_COMMAND_MFR_PWOK_WARNING_TIME:
+            value = pmbus_app_get_mfr_pwok_warning_time();
+            break;
+
+#if PMBUS_ENABLE_CMD_CRPS
+        case PMBUS_COMMAND_MFR_FPC_MAIN_MIN_OFF_TIME:
+            value = pmbus_app_get_mfr_fpc_main_min_off_time();
+            break;
+
+        case PMBUS_COMMAND_MFR_FPC_12VSB_MIN_OFF_TIME:
+            value = pmbus_app_get_mfr_fpc_12vsb_min_off_time();
+            break;
+#endif
 #endif
 
         default:
@@ -1500,6 +1644,12 @@ static uint8_t pmbus_dispatch_build_block_response(uint8_t command, uint8_t *tx_
             length = (uint8_t)sizeof(g_pmbus_dispatch_efficiency_hl);
             break;
 
+#if PMBUS_ENABLE_CMD_CRPS
+        case PMBUS_COMMAND_MFR_EFFICIENCY_DATA:
+            length = pmbus_app_get_mfr_efficiency_data(&data_ptr);
+            break;
+#endif
+
         case PMBUS_COMMAND_IC_DEVICE_ID:
             data_ptr = g_pmbus_dispatch_ic_device_id;
             length = (uint8_t)(sizeof(g_pmbus_dispatch_ic_device_id) - 1U);
@@ -1510,8 +1660,54 @@ static uint8_t pmbus_dispatch_build_block_response(uint8_t command, uint8_t *tx_
             length = (uint8_t)(sizeof(g_pmbus_dispatch_ic_device_rev) - 1U);
             break;
 
+        case PMBUS_COMMAND_MFR_FW_REVISION:
+            length = pmbus_app_get_mfr_fw_revision(&data_ptr);
+            break;
+
+#if PMBUS_ENABLE_CMD_CRPS
+        case PMBUS_COMMAND_MFR_READ_CONFIG_FILE_SIZE:
+            length = pmbus_app_get_mfr_read_config_file_size(&data_ptr);
+            break;
+
+        case PMBUS_COMMAND_MFR_READ_CONFIG_FILE:
+            length = pmbus_app_get_mfr_read_config_file(&data_ptr);
+            break;
+#endif
+
         case PMBUS_COMMAND_MFR_BLACKBOX:
             length = pmbus_app_get_mfr_blackbox(&data_ptr);
+            break;
+
+#if PMBUS_ENABLE_CMD_CRPS
+        case PMBUS_COMMAND_MFR_SPDM:
+            length = pmbus_app_get_mfr_spdm(&data_ptr);
+            break;
+#endif
+
+        case PMBUS_COMMAND_MFR_REAL_TIME_BLACK_BOX:
+            length = pmbus_app_get_mfr_real_time_black_box(&data_ptr);
+            break;
+
+        case PMBUS_COMMAND_MFR_SYSTEM_BLACK_BOX:
+            length = pmbus_app_get_mfr_system_black_box(&data_ptr);
+            break;
+
+#if PMBUS_ENABLE_CMD_CRPS
+        case PMBUS_COMMAND_MFR_PEAK_CURRENT_RECORD:
+            length = pmbus_app_get_mfr_peak_current_record(&data_ptr);
+            break;
+
+        case PMBUS_COMMAND_MFR_COMPONENT_ID:
+            length = pmbus_app_get_mfr_component_id(&data_ptr);
+            break;
+
+        case PMBUS_COMMAND_MFR_OCWPL1_SETTING:
+            length = pmbus_app_get_mfr_ocwpl1_setting(&data_ptr);
+            break;
+#endif
+
+        case PMBUS_COMMAND_MFR_MAX_IOUT_CAPABILITY:
+            length = pmbus_app_get_mfr_max_iout_capability(&data_ptr);
             break;
 #endif
 
@@ -1769,8 +1965,11 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
 
 #if PMBUS_ENABLE_CMD_CORE
                 case PMBUS_COMMAND_VOUT_MODE:
-                    pmbus_app_set_vout_mode(transaction->payload[0]);
-                    return 1U;
+                    if (pmbus_app_set_vout_mode(transaction->payload[0]) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_POWER_MODE:
                     pmbus_app_set_power_mode(transaction->payload[0]);
@@ -1831,6 +2030,28 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 case PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG:
                     pmbus_app_set_mfr_cold_redundancy_config(transaction->payload[0]);
                     return 1U;
+
+                case PMBUS_COMMAND_MFR_FRU_PROTECTION:
+                    pmbus_app_set_mfr_fru_protection(transaction->payload[0]);
+                    return 1U;
+
+#if PMBUS_ENABLE_CMD_CRPS
+                case PMBUS_COMMAND_MFR_BLACK_BOX_CONFIG:
+                    pmbus_app_set_mfr_black_box_config(transaction->payload[0]);
+                    return 1U;
+
+                case PMBUS_COMMAND_MFR_CLEAR_BLACK_BOX:
+                    pmbus_app_clear_mfr_black_box(transaction->payload[0]);
+                    return 1U;
+
+                case PMBUS_COMMAND_MFR_LINE_STATUS:
+                    pmbus_app_set_mfr_line_status(transaction->payload[0]);
+                    return 1U;
+
+                case PMBUS_COMMAND_MFR_EN_STATUS_SIMULATION_CMD:
+                    pmbus_app_set_mfr_en_status_simulation_cmd(transaction->payload[0]);
+                    return 1U;
+#endif
 #endif
 
 #if PMBUS_ENABLE_CMD_FWUPLOAD
@@ -1866,20 +2087,32 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
 
 #if PMBUS_ENABLE_CMD_LIMITS
                 case PMBUS_COMMAND_VOUT_OV_FAULT_LIMIT:
-                    pmbus_app_set_vout_ov_fault_limit(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_ov_fault_limit(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_VOUT_OV_WARN_LIMIT:
-                    pmbus_app_set_vout_ov_warn_limit(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_ov_warn_limit(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_VOUT_UV_WARN_LIMIT:
-                    pmbus_app_set_vout_uv_warn_limit(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_uv_warn_limit(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_VOUT_UV_FAULT_LIMIT:
-                    pmbus_app_set_vout_uv_fault_limit(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_uv_fault_limit(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_IOUT_OC_FAULT_LIMIT:
                     pmbus_app_set_iout_oc_fault_limit(word_value);
@@ -1958,30 +2191,48 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
 
 #if PMBUS_ENABLE_CMD_CORE
                 case PMBUS_COMMAND_VOUT_COMMAND:
-                    pmbus_app_set_vout_command(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_command(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 #endif
 
 #if PMBUS_ENABLE_CMD_LIMITS
                 case PMBUS_COMMAND_VOUT_TRIM:
-                    pmbus_app_set_vout_trim(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_trim(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_VOUT_CAL_OFFSET:
-                    pmbus_app_set_vout_cal_offset(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_cal_offset(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_VOUT_MAX:
-                    pmbus_app_set_vout_max(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_max(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_VOUT_MARGIN_HIGH:
-                    pmbus_app_set_vout_margin_high(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_margin_high(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_VOUT_MARGIN_LOW:
-                    pmbus_app_set_vout_margin_low(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_margin_low(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_VOUT_TRANSITION_RATE:
                     pmbus_app_set_vout_transition_rate(word_value);
@@ -2000,8 +2251,11 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     return 1U;
 
                 case PMBUS_COMMAND_VOUT_MIN:
-                    pmbus_app_set_vout_min(word_value);
-                    return 1U;
+                    if (pmbus_app_set_vout_min(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_POUT_MAX:
                     pmbus_app_set_pout_max(word_value);
@@ -2036,12 +2290,18 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     return 1U;
 
                 case PMBUS_COMMAND_POWER_GOOD_ON:
-                    pmbus_app_set_power_good_on(word_value);
-                    return 1U;
+                    if (pmbus_app_set_power_good_on(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_POWER_GOOD_OFF:
-                    pmbus_app_set_power_good_off(word_value);
-                    return 1U;
+                    if (pmbus_app_set_power_good_off(word_value) != 0U)
+                    {
+                        return 1U;
+                    }
+                    break;
 
                 case PMBUS_COMMAND_TON_DELAY:
                     pmbus_app_set_ton_delay(word_value);
@@ -2083,6 +2343,38 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
 #if PMBUS_ENABLE_CMD_CORE
                 case PMBUS_COMMAND_SMBALERT_MASK:
                     pmbus_app_set_smbalert_mask(word_value);
+                    return 1U;
+#endif
+
+#if PMBUS_ENABLE_CMD_MFR_EXT
+#if PMBUS_ENABLE_CMD_CRPS
+                case PMBUS_COMMAND_MFR_SYSTEM_LED_CNTL:
+                    pmbus_app_set_mfr_system_led_cntl(word_value);
+                    return 1U;
+
+                case PMBUS_COMMAND_MFR_VOUT_MARGINING:
+                    pmbus_app_set_mfr_vout_margining(word_value);
+                    return 1U;
+#endif
+
+                case PMBUS_COMMAND_MFR_PWOK_WARNING_TIME:
+                    pmbus_app_set_mfr_pwok_warning_time(word_value);
+                    return 1U;
+
+#if PMBUS_ENABLE_CMD_CRPS
+                case PMBUS_COMMAND_MFR_FPC_MAIN_MIN_OFF_TIME:
+                    pmbus_app_set_mfr_fpc_main_min_off_time(word_value);
+                    return 1U;
+
+                case PMBUS_COMMAND_MFR_FPC_12VSB_MIN_OFF_TIME:
+                    pmbus_app_set_mfr_fpc_12vsb_min_off_time(word_value);
+                    return 1U;
+#endif
+#endif
+
+#if PMBUS_ENABLE_CMD_FWUPLOAD
+                case PMBUS_COMMAND_MFR_FWUPLOAD_STATUS:
+                    pmbus_app_set_mfr_fwupload_status(word_value);
                     return 1U;
 #endif
 
@@ -2131,7 +2423,10 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 }
 
                 word_value = (uint16_t)(((uint16_t)transaction->payload[1] << 8) | transaction->payload[0]);
-                pmbus_app_set_vout_command(word_value);
+                if (pmbus_app_set_vout_command(word_value) == 0U)
+                {
+                    break;
+                }
                 pmbus_dispatch_store_word(tx_buffer, pmbus_app_get_vout_command());
                 *tx_length = 2U;
                 return 1U;
@@ -2227,6 +2522,43 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 }
             }
 #endif
+#if PMBUS_ENABLE_CMD_MFR_EXT
+            if ((transaction->command == PMBUS_COMMAND_MFR_REAL_TIME_BLACK_BOX) ||
+                (transaction->command == PMBUS_COMMAND_MFR_SYSTEM_BLACK_BOX))
+            {
+                if (transaction->data_len >= 1U)
+                {
+                    if (transaction->command == PMBUS_COMMAND_MFR_REAL_TIME_BLACK_BOX)
+                    {
+                        pmbus_app_set_mfr_real_time_black_box(&transaction->payload[1], transaction->payload[0]);
+                    }
+                    else
+                    {
+                        pmbus_app_set_mfr_system_black_box(&transaction->payload[1], transaction->payload[0]);
+                    }
+                    return 1U;
+                }
+            }
+
+#if PMBUS_ENABLE_CMD_CRPS
+            if ((transaction->command == PMBUS_COMMAND_MFR_PEAK_CURRENT_RECORD) ||
+                (transaction->command == PMBUS_COMMAND_MFR_OCWPL1_SETTING))
+            {
+                if (transaction->data_len >= 1U)
+                {
+                    if (transaction->command == PMBUS_COMMAND_MFR_PEAK_CURRENT_RECORD)
+                    {
+                        pmbus_app_set_mfr_peak_current_record(&transaction->payload[1], transaction->payload[0]);
+                    }
+                    else
+                    {
+                        pmbus_app_set_mfr_ocwpl1_setting(&transaction->payload[1], transaction->payload[0]);
+                    }
+                    return 1U;
+                }
+            }
+#endif
+#endif
             break;
 
         case PMBUS_PROTOCOL_BLOCK_WRITE_READ_PROCESS_CALL:
@@ -2255,7 +2587,7 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 }
             }
 #endif
-#if PMBUS_ENABLE_CMD_PAGE_PLUS
+#if PMBUS_ENABLE_CMD_COEFFICIENTS
             if (transaction->command == PMBUS_COMMAND_COEFFICIENTS)
             {
                 if (pmbus_dispatch_build_coefficients_response(transaction->payload,
@@ -2286,6 +2618,32 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                     transaction->data_len,
                     tx_buffer,
                     tx_length) != 0U)
+                {
+                    return 1U;
+                }
+            }
+#endif
+#if PMBUS_ENABLE_CMD_MFR_EXT
+#if PMBUS_ENABLE_CMD_CRPS
+            if ((transaction->command == PMBUS_COMMAND_MFR_READ_CONFIG_FILE) ||
+                (transaction->command == PMBUS_COMMAND_MFR_SPDM))
+            {
+                /* Payload is a CRPS/product selector placeholder.
+                   TODO: Use it as a real config-file offset or SPDM request. */
+                if (transaction->data_len >= 1U)
+                {
+                    if (pmbus_dispatch_build_block_response(transaction->command, tx_buffer, tx_length) != 0U)
+                    {
+                        return 1U;
+                    }
+                }
+            }
+#endif
+
+            if ((transaction->command == PMBUS_COMMAND_MFR_REAL_TIME_BLACK_BOX) ||
+                (transaction->command == PMBUS_COMMAND_MFR_SYSTEM_BLACK_BOX))
+            {
+                if (pmbus_dispatch_build_block_response(transaction->command, tx_buffer, tx_length) != 0U)
                 {
                     return 1U;
                 }

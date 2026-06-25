@@ -6,6 +6,8 @@
 #include "pmbus_io.h"
 #include "pmbus_pec.h"
 #include "pmbus_protocol.h"
+#include "pmbus_profile_names.h"
+#include "pmbus_semantics.h"
 
 extern uint32_t get_tick(void);
 
@@ -22,7 +24,8 @@ typedef enum
     PMBUS_DEBUG_EVENT_RECOVER_FAIL,
     PMBUS_DEBUG_EVENT_ARA_ALIAS,
     PMBUS_DEBUG_EVENT_ARP,
-    PMBUS_DEBUG_EVENT_ZONE
+    PMBUS_DEBUG_EVENT_ZONE,
+    PMBUS_DEBUG_EVENT_CLOCK_LOW_TIMEOUT
 } pmbus_debug_event_id_t;
 
 typedef enum
@@ -124,14 +127,16 @@ static volatile uint8_t g_arp_address_resolved;
 static volatile uint8_t g_arp_last_command;
 static volatile uint8_t g_address_change_pending;
 static volatile uint8_t g_pending_slave_address_7bit;
-static volatile uint8_t g_prefetched_read_valid;
-static volatile uint8_t g_read_response_ready;
+static volatile uint8_t g_tx_finish_bus_error_guard;
 static volatile uint8_t g_recover_pending;
 static volatile uint8_t g_recover_reason;
 static volatile uint8_t g_recover_state;
 static volatile uint8_t g_recover_attempt_count;
 static volatile uint8_t g_recover_backoff_count;
 static volatile uint8_t g_timeout_fault_count;
+static volatile uint16_t g_software_scl_low_ms;
+static volatile uint8_t g_software_scl_low_state;
+static volatile uint8_t g_software_scl_low_monitor_enabled;
 static volatile uint8_t g_bus_error_fault_count;
 static volatile uint8_t g_rx_overflow_fault_count;
 static volatile uint8_t g_recover_count;
@@ -296,6 +301,7 @@ static const pmbus_command_name_t g_pmbus_command_names[] =
     { PMBUS_COMMAND_MFR_TAMBIENT_MIN, "MFR_TAMBIENT_MIN" },
     { PMBUS_COMMAND_MFR_EFFICIENCY_LL, "MFR_EFFICIENCY_LL" },
     { PMBUS_COMMAND_MFR_EFFICIENCY_HL, "MFR_EFFICIENCY_HL" },
+    { PMBUS_COMMAND_MFR_EFFICIENCY_DATA, "MFR_EFFICIENCY_DATA" },
     { PMBUS_COMMAND_MFR_PIN_ACCURACY, "MFR_PIN_ACCURACY" },
     { PMBUS_COMMAND_IC_DEVICE_ID, "IC_DEVICE_ID" },
     { PMBUS_COMMAND_IC_DEVICE_REV, "IC_DEVICE_REV" },
@@ -303,10 +309,35 @@ static const pmbus_command_name_t g_pmbus_command_names[] =
     { PMBUS_COMMAND_MFR_MAX_TEMP_2, "MFR_MAX_TEMP_2" },
     { PMBUS_COMMAND_MFR_MAX_TEMP_3, "MFR_MAX_TEMP_3" },
     { PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG, "MFR_COLD_REDUNDANCY_CONFIG" },
+    { PMBUS_COMMAND_MFR_READ_CONFIG_FILE_SIZE, "MFR_READ_CONFIG_FILE_SIZE" },
+    { PMBUS_COMMAND_MFR_READ_CONFIG_BLOCK_SIZE, "MFR_READ_CONFIG_BLOCK_SIZE" },
+    { PMBUS_COMMAND_MFR_READ_CONFIG_FILE, "MFR_READ_CONFIG_FILE" },
+    { PMBUS_COMMAND_MFR_HW_COMPATIBILITY, "MFR_HW_COMPATIBILITY" },
+    { PMBUS_COMMAND_MFR_FWUPLOAD_CAPABILITY, "MFR_FWUPLOAD_CAPABILITY" },
     { PMBUS_COMMAND_MFR_FWUPLOAD_MODE, "MFR_FWUPLOAD_MODE" },
     { PMBUS_COMMAND_MFR_FWUPLOAD, "MFR_FWUPLOAD" },
     { PMBUS_COMMAND_MFR_FWUPLOAD_STATUS, "MFR_FWUPLOAD_STATUS" },
-    { PMBUS_COMMAND_MFR_BLACKBOX, "MFR_BLACKBOX" }
+    { PMBUS_COMMAND_MFR_FW_REVISION, "MFR_FW_REVISION" },
+    { PMBUS_COMMAND_MFR_SPDM, "MFR_SPDM" },
+    { PMBUS_COMMAND_MFR_FRU_PROTECTION, "MFR_FRU_PROTECTION" },
+    { PMBUS_COMMAND_MFR_BLACKBOX, "MFR_BLACKBOX" },
+    { PMBUS_COMMAND_MFR_REAL_TIME_BLACK_BOX, "MFR_REAL_TIME_BLACK_BOX" },
+    { PMBUS_COMMAND_MFR_SYSTEM_BLACK_BOX, "MFR_SYSTEM_BLACK_BOX" },
+    { PMBUS_COMMAND_MFR_BLACK_BOX_CONFIG, "MFR_BLACK_BOX_CONFIG" },
+    { PMBUS_COMMAND_MFR_CLEAR_BLACK_BOX, "MFR_CLEAR_BLACK_BOX" },
+    { PMBUS_COMMAND_MFR_LINE_STATUS, "MFR_LINE_STATUS" },
+    { PMBUS_COMMAND_MFR_SYSTEM_LED_CNTL, "MFR_SYSTEM_LED_CNTL" },
+    { PMBUS_COMMAND_MFR_FWUPLOAD_BLOCK_SIZE, "MFR_FWUPLOAD_BLOCK_SIZE" },
+    { PMBUS_COMMAND_MFR_EN_STATUS_SIMULATION_CMD, "MFR_EN_STATUS_SIMULATION_CMD" },
+    { PMBUS_COMMAND_MFR_PEAK_CURRENT_RECORD, "MFR_PEAK_CURRENT_RECORD" },
+    { PMBUS_COMMAND_MFR_COMPONENT_ID, "MFR_COMPONENT_ID" },
+    { PMBUS_COMMAND_MFR_TOT_POUT_MAX, "MFR_TOT_POUT_MAX" },
+    { PMBUS_COMMAND_MFR_VOUT_MARGINING, "MFR_VOUT_MARGINING" },
+    { PMBUS_COMMAND_MFR_OCWPL1_SETTING, "MFR_OCWPL1_SETTING" },
+    { PMBUS_COMMAND_MFR_PWOK_WARNING_TIME, "MFR_PWOK_WARNING_TIME" },
+    { PMBUS_COMMAND_MFR_MAX_IOUT_CAPABILITY, "MFR_MAX_IOUT_CAPABILITY" },
+    { PMBUS_COMMAND_MFR_FPC_MAIN_MIN_OFF_TIME, "MFR_FPC_MAIN_MIN_OFF_TIME" },
+    { PMBUS_COMMAND_MFR_FPC_12VSB_MIN_OFF_TIME, "MFR_FPC_12VSB_MIN_OFF_TIME" }
 };
 
 static void pmbus_drv_capture_debug_frame(uint8_t raw_length, pmbus_dispatch_transaction_t *transaction);
@@ -334,6 +365,8 @@ static uint8_t pmbus_drv_bus_lines_released(void);
 static uint8_t pmbus_drv_bus_clear(void);
 static uint8_t pmbus_drv_recover_bus(void);
 static void pmbus_drv_set_recover_pending(uint8_t reason);
+static void pmbus_drv_reset_clock_low_monitor(void);
+static void pmbus_drv_check_clock_low_timeout_1ms(void);
 static void pmbus_drv_append_tx_pec(uint8_t command_length);
 static void pmbus_drv_append_read_only_tx_pec(uint8_t address_7bit);
 static uint8_t pmbus_drv_should_append_read_pec(uint8_t repeated_start);
@@ -438,6 +471,13 @@ static const char *pmbus_drv_get_command_name(uint8_t command)
     uint8_t index;
     uint8_t count;
     static char policy_name[24];
+    const char *profile_name;
+
+    profile_name = pmbus_profile_get_command_name(command, policy_name, (uint8_t)sizeof(policy_name));
+    if (profile_name != (const char *)0)
+    {
+        return profile_name;
+    }
 
     count = (uint8_t)(sizeof(g_pmbus_command_names) / sizeof(g_pmbus_command_names[0]));
     for (index = 0U; index < count; index++)
@@ -455,7 +495,7 @@ static const char *pmbus_drv_get_command_name(uint8_t command)
         return policy_name;
     }
 
-    if ((command >= PMBUS_COMMAND_MFR_SPECIFIC_C4) &&
+    if ((command >= 0xC0U) &&
         (command <= PMBUS_COMMAND_MFR_SPECIFIC_FD))
     {
         sprintf(policy_name, "MFR_SPECIFIC_%02X", (unsigned int)command);
@@ -595,13 +635,34 @@ static int8_t pmbus_drv_decode_vout_exponent(uint8_t vout_mode)
 {
     int8_t exponent;
 
-    exponent = (int8_t)(vout_mode & 0x1FU);
+    exponent = (int8_t)(vout_mode & PMBUS_VOUT_MODE_PARAMETER_MASK);
     if ((exponent & 0x10) != 0)
     {
         exponent = (int8_t)(exponent | (int8_t)0xE0);
     }
 
     return exponent;
+}
+
+static const char *pmbus_drv_get_vout_mode_format_name(uint8_t vout_mode)
+{
+    switch (vout_mode & PMBUS_VOUT_MODE_FORMAT_MASK)
+    {
+        case PMBUS_VOUT_MODE_FORMAT_ULINEAR16:
+            return "ULINEAR16";
+
+        case PMBUS_VOUT_MODE_FORMAT_VID:
+            return "VID";
+
+        case PMBUS_VOUT_MODE_FORMAT_DIRECT:
+            return "DIRECT";
+
+        case PMBUS_VOUT_MODE_FORMAT_IEEE_HALF:
+            return "IEEE_HALF";
+
+        default:
+            return "UNKNOWN";
+    }
 }
 
 static long pmbus_drv_linear11_to_fixed4(uint16_t raw_value, uint16_t scale_divisor)
@@ -646,6 +707,142 @@ static unsigned long pmbus_drv_ulinear16_to_fixed4(uint16_t raw_value, int8_t ex
     }
 
     return scaled_value;
+}
+
+static long pmbus_drv_pow10_signed(int8_t exponent)
+{
+    long value;
+    int8_t index;
+
+    value = 1L;
+    if (exponent < 0)
+    {
+        exponent = (int8_t)(-exponent);
+    }
+
+    for (index = 0; index < exponent; index++)
+    {
+        value *= 10L;
+    }
+
+    return value;
+}
+
+static int16_t pmbus_drv_decode_s16(uint16_t raw_value)
+{
+    return (int16_t)raw_value;
+}
+
+static int8_t pmbus_drv_decode_s8(uint8_t raw_value)
+{
+    return (int8_t)raw_value;
+}
+
+static uint8_t pmbus_drv_direct_to_fixed4(uint8_t command, uint16_t raw_value, long *fixed4_value)
+{
+    uint8_t *coefficients;
+    uint8_t coefficient_length;
+    int16_t m;
+    int16_t b;
+    int8_t r;
+    long y;
+    long numerator;
+    long denominator;
+    long power10;
+
+    if (fixed4_value == 0)
+    {
+        return 0U;
+    }
+
+    coefficient_length = pmbus_app_get_coefficients(command, &coefficients);
+    if ((coefficient_length < 5U) || (coefficients == 0))
+    {
+        return 0U;
+    }
+
+    m = pmbus_drv_decode_s16((uint16_t)(((uint16_t)coefficients[1] << 8) | coefficients[0]));
+    b = pmbus_drv_decode_s16((uint16_t)(((uint16_t)coefficients[3] << 8) | coefficients[2]));
+    r = pmbus_drv_decode_s8(coefficients[4]);
+    if (m == 0)
+    {
+        return 0U;
+    }
+
+    y = (long)pmbus_drv_decode_s16(raw_value);
+    if (r >= 0)
+    {
+        power10 = pmbus_drv_pow10_signed(r);
+        numerator = (y * 10000L) - ((long)b * 10000L * power10);
+        denominator = (long)m * power10;
+    }
+    else
+    {
+        power10 = pmbus_drv_pow10_signed(r);
+        numerator = ((y * power10) - (long)b) * 10000L;
+        denominator = (long)m;
+    }
+
+    if (denominator == 0L)
+    {
+        return 0U;
+    }
+
+    *fixed4_value = pmbus_drv_div_round_signed(numerator, denominator);
+    return 1U;
+}
+
+static uint8_t pmbus_drv_ieee_half_to_fixed4(uint16_t raw_value, long *fixed4_value)
+{
+    uint8_t sign;
+    uint8_t exponent;
+    uint16_t fraction;
+    long mantissa;
+    int8_t shift;
+    long value;
+
+    if (fixed4_value == 0)
+    {
+        return 0U;
+    }
+
+    sign = (uint8_t)((raw_value & 0x8000U) != 0U);
+    exponent = (uint8_t)((raw_value >> 10) & 0x1FU);
+    fraction = (uint16_t)(raw_value & 0x03FFU);
+
+    if (exponent == 0x1FU)
+    {
+        return 0U;
+    }
+
+    if (exponent == 0U)
+    {
+        mantissa = (long)fraction;
+        shift = -24;
+    }
+    else
+    {
+        mantissa = 1024L + (long)fraction;
+        shift = (int8_t)((int8_t)exponent - 25);
+    }
+
+    value = mantissa * 10000L;
+    if (shift >= 0)
+    {
+        value <<= shift;
+    }
+    else
+    {
+        value = pmbus_drv_div_round_signed(value, (1L << (-shift)));
+    }
+
+    if (sign != 0U)
+    {
+        value = -value;
+    }
+
+    *fixed4_value = value;
+    return 1U;
 }
 
 static void pmbus_drv_print_fixed4_value(long fixed4_value)
@@ -787,6 +984,8 @@ static void pmbus_drv_print_debug_tx(const pmbus_debug_tx_snapshot_t *snapshot)
     uint8_t print_length;
     uint8_t index;
     int8_t exponent;
+    uint8_t vout_mode;
+    uint8_t vout_format;
 
     command_name = pmbus_drv_get_command_name(snapshot->command);
     protocol_name = pmbus_drv_get_protocol_name(snapshot->protocol);
@@ -822,14 +1021,77 @@ static void pmbus_drv_print_debug_tx(const pmbus_debug_tx_snapshot_t *snapshot)
             PMBUS_DEBUG_PRINT(" | raw=0x%04X", (unsigned int)raw_word);
             break;
 
+        case PMBUS_COMMAND_VOUT_COMMAND:
+        case PMBUS_COMMAND_VOUT_TRIM:
+        case PMBUS_COMMAND_VOUT_CAL_OFFSET:
+        case PMBUS_COMMAND_VOUT_MAX:
+        case PMBUS_COMMAND_VOUT_MARGIN_HIGH:
+        case PMBUS_COMMAND_VOUT_MARGIN_LOW:
+        case PMBUS_COMMAND_VOUT_MIN:
+        case PMBUS_COMMAND_VOUT_OV_FAULT_LIMIT:
+        case PMBUS_COMMAND_VOUT_OV_WARN_LIMIT:
+        case PMBUS_COMMAND_VOUT_UV_WARN_LIMIT:
+        case PMBUS_COMMAND_VOUT_UV_FAULT_LIMIT:
+        case PMBUS_COMMAND_POWER_GOOD_ON:
+        case PMBUS_COMMAND_POWER_GOOD_OFF:
         case PMBUS_COMMAND_READ_VOUT:
-            exponent = pmbus_drv_decode_vout_exponent(pmbus_app_get_vout_mode());
-            ufixed4_value = pmbus_drv_ulinear16_to_fixed4(raw_word, exponent);
-            PMBUS_DEBUG_PRINT("value=%lu.%04lu | exp=%d | raw=0x%04X",
-                ufixed4_value / 10000UL,
-                ufixed4_value % 10000UL,
-                (int)exponent,
-                (unsigned int)raw_word);
+        case PMBUS_COMMAND_MFR_VOUT_MIN:
+        case PMBUS_COMMAND_MFR_VOUT_MAX:
+            vout_mode = pmbus_app_get_vout_mode();
+            vout_format = (uint8_t)(vout_mode & PMBUS_VOUT_MODE_FORMAT_MASK);
+            if (vout_format == PMBUS_VOUT_MODE_FORMAT_ULINEAR16)
+            {
+                exponent = pmbus_drv_decode_vout_exponent(vout_mode);
+                ufixed4_value = pmbus_drv_ulinear16_to_fixed4(raw_word, exponent);
+                PMBUS_DEBUG_PRINT("value=%lu.%04lu | mode=%s | exp=%d | raw=0x%04X",
+                    ufixed4_value / 10000UL,
+                    ufixed4_value % 10000UL,
+                    pmbus_drv_get_vout_mode_format_name(vout_mode),
+                    (int)exponent,
+                    (unsigned int)raw_word);
+            }
+            else if (vout_format == PMBUS_VOUT_MODE_FORMAT_DIRECT)
+            {
+                if (pmbus_drv_direct_to_fixed4(snapshot->command, raw_word, &fixed4_value) != 0U)
+                {
+                    PMBUS_DEBUG_PRINT("value=");
+                    pmbus_drv_print_fixed4_value(fixed4_value);
+                    PMBUS_DEBUG_PRINT(" | mode=%s | raw=0x%04X",
+                        pmbus_drv_get_vout_mode_format_name(vout_mode),
+                        (unsigned int)raw_word);
+                }
+                else
+                {
+                    PMBUS_DEBUG_PRINT("value_raw=0x%04X | mode=%s | coefficients unavailable",
+                        (unsigned int)raw_word,
+                        pmbus_drv_get_vout_mode_format_name(vout_mode));
+                }
+            }
+            else if (vout_format == PMBUS_VOUT_MODE_FORMAT_IEEE_HALF)
+            {
+                if (pmbus_drv_ieee_half_to_fixed4(raw_word, &fixed4_value) != 0U)
+                {
+                    PMBUS_DEBUG_PRINT("value=");
+                    pmbus_drv_print_fixed4_value(fixed4_value);
+                    PMBUS_DEBUG_PRINT(" | mode=%s | raw=0x%04X",
+                        pmbus_drv_get_vout_mode_format_name(vout_mode),
+                        (unsigned int)raw_word);
+                }
+                else
+                {
+                    PMBUS_DEBUG_PRINT("value_raw=0x%04X | mode=%s | special/invalid IEEE value",
+                        (unsigned int)raw_word,
+                        pmbus_drv_get_vout_mode_format_name(vout_mode));
+                }
+            }
+            else
+            {
+                PMBUS_DEBUG_PRINT("value_raw=0x%04X | mode=%s | param=0x%02X | rel=%u",
+                    (unsigned int)raw_word,
+                    pmbus_drv_get_vout_mode_format_name(vout_mode),
+                    (unsigned int)(vout_mode & PMBUS_VOUT_MODE_PARAMETER_MASK),
+                    (unsigned int)(((vout_mode & PMBUS_VOUT_MODE_RELATIVE_MASK) != 0U) ? 1U : 0U));
+            }
             break;
 
         case PMBUS_COMMAND_PMBUS_REVISION:
@@ -913,7 +1175,6 @@ static void pmbus_drv_reset_tx(void)
     g_tx_length = 0U;
     g_tx_index = 0U;
     g_last_read_used_pec = 0U;
-    g_prefetched_read_valid = 0U;
 }
 
 static void pmbus_drv_reset_rx(void)
@@ -1298,6 +1559,58 @@ static void pmbus_drv_set_recover_pending(uint8_t reason)
     }
 }
 
+static void pmbus_drv_reset_clock_low_monitor(void)
+{
+    g_software_scl_low_ms = 0U;
+    g_software_scl_low_state = 0U;
+}
+
+static void pmbus_drv_check_clock_low_timeout_1ms(void)
+{
+#if PMBUS_ENABLE_SLAVE_RECOVER
+    if (pmbus_io_read_scl() != 0U)
+    {
+        pmbus_drv_reset_clock_low_monitor();
+        return;
+    }
+
+    if (g_software_scl_low_state == 0U)
+    {
+        g_software_scl_low_ms = 1U;
+        g_software_scl_low_state = 1U;
+    }
+    else if (g_software_scl_low_state == 1U)
+    {
+        if (g_software_scl_low_ms < 0xFFFFU)
+        {
+            g_software_scl_low_ms++;
+        }
+
+        if (g_software_scl_low_ms >= PMBUS_I2C_CLOCK_LOW_TIMEOUT_MS)
+        {
+            g_software_scl_low_state = 2U;
+            g_timeout_fault_count = (uint8_t)(g_timeout_fault_count + 1U);
+            pmbus_app_set_status_cml(PMBUS_STATUS_CML_OTHER_COMMUNICATION_FAULT);
+            pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_CLOCK_LOW_TIMEOUT,
+                                  (uint8_t)(g_software_scl_low_ms & 0x00FFU),
+                                  (uint8_t)((g_software_scl_low_ms >> 8) & 0x00FFU));
+
+            if (g_timeout_fault_count >= PMBUS_I2C_TIMEOUT_RECOVER_THRESHOLD)
+            {
+                pmbus_drv_set_recover_pending(PMBUS_RECOVER_REASON_TIMEOUT);
+                g_timeout_fault_count = 0U;
+            }
+        }
+    }
+    else
+    {
+        /* Already latched. Wait for SCL high or background recovery. */
+    }
+#else
+    pmbus_drv_reset_clock_low_monitor();
+#endif
+}
+
 static uint8_t pmbus_drv_recover_bus(void)
 {
 #if PMBUS_ENABLE_SLAVE_RECOVER
@@ -1314,11 +1627,13 @@ static uint8_t pmbus_drv_recover_bus(void)
     pmbus_drv_reset_tx();
     g_write_frame_pending = 0U;
     g_write_frame_pending_tick = 0UL;
+    pmbus_drv_reset_clock_low_monitor();
     g_request_address_7bit = pmbus_app_get_slave_address_7bit();
     g_request_target = PMBUS_REQUEST_TARGET_NORMAL;
     g_pending_request_address_7bit = g_request_address_7bit;
     g_pending_request_target = PMBUS_REQUEST_TARGET_NORMAL;
     bus_released = 0U;
+    g_tx_finish_bus_error_guard = 0U;
 
     for (attempt_count = 0U; attempt_count < PMBUS_I2C_BUS_CLEAR_RETRY_COUNT; attempt_count++)
     {
@@ -1778,7 +2093,32 @@ static void pmbus_drv_process_frame(uint8_t repeated_start)
         return;
     }
 
-    (void)pmbus_dispatch_execute(transaction, g_tx_buffer, &tx_length);
+    {
+        uint8_t dispatch_result;
+        uint8_t semantic_tx_length;
+
+        dispatch_result = pmbus_dispatch_execute(transaction, g_tx_buffer, &tx_length);
+        semantic_tx_length = tx_length;
+
+        if (dispatch_result != 0U)
+        {
+            if (repeated_start != 0U)
+            {
+                pmbus_semantics_record_read_response(transaction->command,
+                    (uint8_t)transaction->protocol,
+                    g_tx_buffer,
+                    semantic_tx_length,
+                    0U);
+            }
+            else
+            {
+                pmbus_semantics_record_write(transaction->command,
+                    (uint8_t)transaction->protocol,
+                    transaction->payload,
+                    transaction->data_len);
+            }
+        }
+    }
     g_tx_length = tx_length;
     g_tx_index = 0U;
 
@@ -1835,14 +2175,15 @@ void pmbus_drv_init(void)
     g_arp_last_command = 0U;
     g_address_change_pending = 0U;
     g_pending_slave_address_7bit = g_current_slave_address_7bit;
-    g_prefetched_read_valid = 0U;
-    g_read_response_ready = 0U;
+    g_tx_finish_bus_error_guard = 0U;
     g_recover_pending = 0U;
     g_recover_reason = PMBUS_RECOVER_REASON_NONE;
     g_recover_state = PMBUS_RECOVER_STATE_IDLE;
     g_recover_attempt_count = 0U;
     g_recover_backoff_count = 0U;
     g_timeout_fault_count = 0U;
+    pmbus_drv_reset_clock_low_monitor();
+    g_software_scl_low_monitor_enabled = 0U;
     g_bus_error_fault_count = 0U;
     g_rx_overflow_fault_count = 0U;
     g_recover_count = 0U;
@@ -1854,7 +2195,6 @@ void pmbus_drv_init(void)
     g_write_frame_pending_tick = 0UL;
     g_last_command = 0U;
     g_last_command_valid = 0U;
-    g_read_response_ready = 0U;
     g_debug_head = 0U;
     g_debug_tail = 0U;
     g_debug_frame_head = 0U;
@@ -1884,7 +2224,24 @@ void pmbus_drv_init(void)
     pmbus_io_i2c_clear_timeout_flag();
     pmbus_io_i2c_interrupt(Enable);
     pmbus_app_set_busy_state(0U);
+    g_software_scl_low_monitor_enabled = 1U;
     pmbus_io_enable_global_interrupt();
+}
+
+void pmbus_drv_timer_1ms(void)
+{
+    if (g_software_scl_low_monitor_enabled == 0U)
+    {
+        return;
+    }
+
+    /*
+        Match the generic SMBus slave timer path: guard shared timeout state
+        with the I2C NVIC IRQ only. Do not toggle the I2C peripheral INTEN.
+    */
+    pmbus_io_i2c_irq_guard(Disable);
+    pmbus_drv_check_clock_low_timeout_1ms();
+    pmbus_io_i2c_irq_guard(Enable);
 }
 
 void pmbus_drv_background_task(void)
@@ -1894,6 +2251,7 @@ void pmbus_drv_background_task(void)
     uint8_t recover_success;
 
     pmbus_app_background_task();
+    pmbus_semantics_background_task();
     pmbus_drv_update_ara_alias_state();
 
     if (g_address_change_pending != 0U)
@@ -2091,6 +2449,11 @@ void pmbus_drv_background_task(void)
                 PMBUS_DEBUG_PRINT("PMBus Zone event=0x%02X value=0x%02X\r\n", (unsigned int)event.value0, (unsigned int)event.value1);
                 break;
 
+            case PMBUS_DEBUG_EVENT_CLOCK_LOW_TIMEOUT:
+                PMBUS_DEBUG_PRINT("PMBus software SCL-low timeout ms=%u\r\n",
+                    (unsigned int)((uint16_t)event.value0 | ((uint16_t)event.value1 << 8)));
+                break;
+
             default:
                 break;
         }
@@ -2102,29 +2465,24 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
 {
     uint8_t status;
     uint8_t saved_state;
+    uint8_t timeout_seen;
 
     saved_state = pmbus_io_isr_enter();
 
     status = pmbus_io_i2c_get_status();
-    pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_STATUS, status, 0U);
-
-    if (pmbus_io_i2c_timeout_flag() != 0U)
+    timeout_seen = pmbus_io_i2c_timeout_flag();
+    if (timeout_seen != 0U)
     {
         pmbus_io_i2c_clear_timeout_flag();
         pmbus_io_i2c_disable_timeout_counter();
-        g_timeout_fault_count = (uint8_t)(g_timeout_fault_count + 1U);
-        pmbus_app_set_status_cml(PMBUS_STATUS_CML_OTHER_COMMUNICATION_FAULT);
-        if (g_timeout_fault_count >= PMBUS_I2C_TIMEOUT_RECOVER_THRESHOLD)
-        {
-            pmbus_drv_set_recover_pending(PMBUS_RECOVER_REASON_TIMEOUT);
-            g_timeout_fault_count = 0U;
-        }
     }
-    else
+
+    pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_STATUS, status, 0U);
+
+    switch (status)
     {
-        switch (status)
-        {
             case PMBUS_I2C_STATUS_SLA_W_ACK:
+                g_tx_finish_bus_error_guard = 0U;
                 if (g_write_frame_pending != 0U)
                 {
                     pmbus_drv_restore_pending_request_context();
@@ -2136,13 +2494,12 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 pmbus_drv_update_request_target();
                 pmbus_drv_reset_rx();
                 pmbus_drv_reset_tx();
-                g_prefetched_read_valid = 0U;
-                g_read_response_ready = 0U;
                 g_write_frame_pending_tick = 0UL;
                 pmbus_io_i2c_set_ack();
                 break;
 
             case PMBUS_I2C_STATUS_DATA_RX_ACK:
+                g_tx_finish_bus_error_guard = 0U;
                 if (g_rx_length < PMBUS_RX_BUFFER_SIZE)
                 {
                     g_rx_buffer[g_rx_length] = pmbus_io_i2c_read_data();
@@ -2164,17 +2521,16 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 break;
 
             case PMBUS_I2C_STATUS_DATA_RX_NACK:
+                g_tx_finish_bus_error_guard = 0U;
                 pmbus_app_set_status_cml(PMBUS_STATUS_CML_OTHER_COMMUNICATION_FAULT);
                 pmbus_drv_reset_rx();
                 g_write_frame_pending = 0U;
                 g_write_frame_pending_tick = 0UL;
-                g_prefetched_read_valid = 0U;
-                g_read_response_ready = 0U;
                 pmbus_io_i2c_set_ack();
                 break;
 
             case PMBUS_I2C_STATUS_STOP_RESTART:
-                g_prefetched_read_valid = 0U;
+                g_tx_finish_bus_error_guard = 0U;
                 if (g_rx_length > 0U)
                 {
                     pmbus_frame_class_t frame_class;
@@ -2187,7 +2543,6 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                             pmbus_drv_save_pending_request_context();
                             g_write_frame_pending = 1U;
                             g_write_frame_pending_tick = get_tick();
-                            g_read_response_ready = 0U;
                         }
                         else
                         {
@@ -2195,7 +2550,6 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                             pmbus_drv_reset_rx();
                             g_write_frame_pending = 0U;
                             g_write_frame_pending_tick = 0UL;
-                            g_read_response_ready = 0U;
                         }
                     }
                     else if (g_request_target == PMBUS_REQUEST_TARGET_ZONE_WRITE)
@@ -2204,7 +2558,6 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                         pmbus_drv_reset_rx();
                         g_write_frame_pending = 0U;
                         g_write_frame_pending_tick = 0UL;
-                        g_read_response_ready = 0U;
                     }
                     else
                     {
@@ -2215,7 +2568,6 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                             pmbus_drv_reset_rx();
                             g_write_frame_pending = 0U;
                             g_write_frame_pending_tick = 0UL;
-                            g_read_response_ready = 0U;
                         }
                         else
                         {
@@ -2232,7 +2584,6 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                             pmbus_drv_save_pending_request_context();
                             g_write_frame_pending = 1U;
                             g_write_frame_pending_tick = get_tick();
-                            g_read_response_ready = 0U;
                         }
                     }
                 }
@@ -2241,6 +2592,7 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 break;
 
             case PMBUS_I2C_STATUS_SLA_R_ACK:
+                g_tx_finish_bus_error_guard = 0U;
                 pmbus_drv_update_request_target();
                 if (g_request_target == PMBUS_REQUEST_TARGET_ARA)
                 {
@@ -2262,11 +2614,6 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 else if (g_request_target == PMBUS_REQUEST_TARGET_ZONE_READ)
                 {
                     pmbus_drv_prepare_zone_read_response();
-                    pmbus_drv_load_next_tx_byte();
-                }
-                else if (g_read_response_ready != 0U)
-                {
-                    g_read_response_ready = 0U;
                     pmbus_drv_load_next_tx_byte();
                 }
                 else if ((g_write_frame_pending != 0U) || (g_rx_length > 0U))
@@ -2291,6 +2638,7 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 break;
 
             case PMBUS_I2C_STATUS_DATA_TX_ACK:
+                g_tx_finish_bus_error_guard = 0U;
                 pmbus_drv_load_next_tx_byte();
                 if ((g_request_target == PMBUS_REQUEST_TARGET_ARA) && (g_tx_index >= g_tx_length))
                 {
@@ -2307,10 +2655,9 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
             case PMBUS_I2C_STATUS_LAST_TX_ACK:
                 pmbus_drv_reset_tx();
                 pmbus_drv_reset_rx();
+                g_tx_finish_bus_error_guard = 1U;
                 g_write_frame_pending = 0U;
                 g_write_frame_pending_tick = 0UL;
-                g_prefetched_read_valid = 0U;
-                g_read_response_ready = 0U;
                 pmbus_io_i2c_set_ack();
                 pmbus_io_i2c_disable_timeout_counter();
                 if (g_request_target == PMBUS_REQUEST_TARGET_ARA)
@@ -2330,19 +2677,37 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 break;
 
             case PMBUS_I2C_STATUS_BUS_ERROR:
-                pmbus_app_set_status_cml(PMBUS_STATUS_CML_OTHER_COMMUNICATION_FAULT);
+                if (g_tx_finish_bus_error_guard != 0U)
+                {
+                    /*
+                        Some M031 I2C STOP/NACK endings report one 0x00 status
+                        immediately after a normal slave-transmit completion.
+                        Treat that single post-TX report as cleanup; a genuinely
+                        stuck bus is still recovered by the SCL-low monitor.
+                    */
+                    pmbus_drv_reset_rx();
+                    pmbus_drv_reset_tx();
+                    g_tx_finish_bus_error_guard = 0U;
+                    g_write_frame_pending = 0U;
+                    g_write_frame_pending_tick = 0UL;
+                    pmbus_io_i2c_disable_timeout_counter();
+                    pmbus_io_i2c_clear_timeout_flag();
+                    pmbus_io_i2c_bus_error_reset();
+                    break;
+                }
+
+                g_tx_finish_bus_error_guard = 0U;
                 pmbus_drv_reset_rx();
                 pmbus_drv_reset_tx();
                 g_write_frame_pending = 0U;
                 g_write_frame_pending_tick = 0UL;
-                g_prefetched_read_valid = 0U;
-                g_read_response_ready = 0U;
                 pmbus_io_i2c_disable_timeout_counter();
                 pmbus_io_i2c_clear_timeout_flag();
                 pmbus_io_i2c_bus_error_reset();
 
                 if (pmbus_drv_bus_lines_released() == 0U)
                 {
+                    pmbus_app_set_status_cml(PMBUS_STATUS_CML_OTHER_COMMUNICATION_FAULT);
                     g_bus_error_fault_count = (uint8_t)(g_bus_error_fault_count + 1U);
                     if (g_bus_error_fault_count >= PMBUS_I2C_BUS_ERROR_RECOVER_THRESHOLD)
                     {
@@ -2359,7 +2724,6 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
             default:
                 pmbus_io_i2c_set_ack();
                 break;
-        }
     }
 
     pmbus_io_i2c_si_check();

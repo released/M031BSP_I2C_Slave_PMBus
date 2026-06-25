@@ -127,8 +127,26 @@ void pmbus_io_i2c_interrupt(unsigned char enable_state)
     }
 }
 
+void pmbus_io_i2c_irq_guard(unsigned char enable_state)
+{
+    if (enable_state == Enable)
+    {
+        NVIC_EnableIRQ(PMBUS_PORT_I2C_IRQn);
+    }
+    else
+    {
+        NVIC_DisableIRQ(PMBUS_PORT_I2C_IRQn);
+    }
+}
+
 void pmbus_io_i2c_timeout(unsigned char enable_state)
 {
+#if PMBUS_PORT_USE_I2C_TIMEOUT_COUNTER
+    /*
+        Use only the ordinary I2C timeout counter path. Do not replace this
+        with hardware SMBus Bus Management / PEC registers on this M032 target.
+        PMBus PEC, block sizing, ARA, and ARP are implemented in software.
+    */
     if (enable_state == Enable)
     {
         I2C_EnableTimeout(PMBUS_PORT_I2C_INSTANCE, 0U);
@@ -137,11 +155,16 @@ void pmbus_io_i2c_timeout(unsigned char enable_state)
     {
         I2C_DisableTimeout(PMBUS_PORT_I2C_INSTANCE);
     }
+#else
+    (void)enable_state;
+#endif
 }
 
 void pmbus_io_i2c_clear_timeout_flag(void)
 {
+#if PMBUS_PORT_USE_I2C_TIMEOUT_COUNTER
     I2C_ClearTimeoutFlag(PMBUS_PORT_I2C_INSTANCE);
+#endif
 }
 
 void pmbus_io_i2c_si_check(void)
@@ -161,7 +184,11 @@ unsigned char pmbus_io_i2c_get_status(void)
 
 unsigned char pmbus_io_i2c_timeout_flag(void)
 {
+#if PMBUS_PORT_USE_I2C_TIMEOUT_COUNTER
     return (unsigned char)I2C_GET_TIMEOUT_FLAG(PMBUS_PORT_I2C_INSTANCE);
+#else
+    return 0U;
+#endif
 }
 
 unsigned char pmbus_io_i2c_get_received_address(void)
@@ -184,12 +211,16 @@ unsigned char pmbus_io_i2c_get_received_address(void)
 
 void pmbus_io_i2c_enable_timeout_counter(void)
 {
+#if PMBUS_PORT_USE_I2C_TIMEOUT_COUNTER
     I2C_EnableTimeout(PMBUS_PORT_I2C_INSTANCE, 0U);
+#endif
 }
 
 void pmbus_io_i2c_disable_timeout_counter(void)
 {
+#if PMBUS_PORT_USE_I2C_TIMEOUT_COUNTER
     I2C_DisableTimeout(PMBUS_PORT_I2C_INSTANCE);
+#endif
 }
 
 void pmbus_io_i2c_bus_error_reset(void)

@@ -1,14 +1,14 @@
-# M031BSP_I2C_Slave_PMBus
+﻿# M031BSP_I2C_Slave_PMBus
 
 Nuvoton M031 PMBus/SMBus slave firmware validation.
 
-Last updated: 2026/06/18
+Last updated: 2026/06/26
 
 ## Overview
 
 The firmware focuses on a standards-aligned PMBus slave transport path:
 
-- SMBus/PMBus slave addressing and repeated START handling
+- SMBus/PMBus slave addressing and normal combined-format repeated START handling
 - PEC generation and validation using CRC-8 polynomial 0x07
 - SMBALERT#/ARA, ARP, and Zone alias support paths
 - PMBus command dispatch aligned to PMBus 1.3.1 Part II command summary
@@ -27,12 +27,20 @@ The firmware focuses on a standards-aligned PMBus slave transport path:
 | Toolchain | Keil uVision5 with ARM Compiler 6 |
 | Debug UART | UART0, 115200 8N1 |
 
+Hardware SMBus note:
+
+- This firmware uses the normal I2C slave controller plus software PMBus/SMBus handling.
+- It must not depend on hardware SMBus Bus Management / PEC registers such as `I2C_BUSCTL`, `I2C_BUSTCTL`, `I2C_BUSSTS`, `I2C_PKTSIZE`, `I2C_PKTCRC`, `I2C_BUSTOUT`, or `I2C_CLKTOUT`.
+- PEC, block transaction sizing, ARA/ARP policy, and PMBus command semantics are implemented in software.
+- Software SCL-low timeout is sampled from `TMR1_IRQHandler()` at 1 ms cadence. The default timeout threshold is `PMBUS_I2C_CLOCK_LOW_TIMEOUT_MS=35U`.
+- Any ordinary I2C timeout counter used by the port layer is only a recovery aid; the software SCL-low monitor is the portable SMBus clock-low timeout path for this M032 target.
+
 ## Pin Map
 
 | Signal | Pin | Direction | Notes |
 | --- | --- | --- | --- |
-| PMBUS_SCL | PB5 | Input/output | I2C0 SCL, open-drain, external pull-up required |
-| PMBUS_SDA | PB4 | Input/output | I2C0 SDA, open-drain, external pull-up required |
+| PMBUS_SCL | PB5 default | Input/output | Default `PMBUS_PORT_PROFILE_M031_I2C0_PB4_PB5`, I2C0 SCL, open-drain, external pull-up required |
+| PMBUS_SDA | PB4 default | Input/output | Default `PMBUS_PORT_PROFILE_M031_I2C0_PB4_PB5`, I2C0 SDA, open-drain, external pull-up required |
 | PMBUS_ALERT# | PB6 | Output | Active-low SMBALERT#, open-drain, external pull-up required |
 | UART0_RXD | PB12 | Input | Debug UART RX |
 | UART0_TXD | PB13 | Output | Debug UART TX |
@@ -79,6 +87,16 @@ Background code is used for debug printing and non-critical housekeeping only.
 
 This is intentional: SLA+W, SLA+R, repeated START, STOP, PEC, and TX byte preparation must not depend on slow background logging.
 
+Software SCL-low timeout sampling is also not done in the polling loop. `TMR1_IRQHandler()` calls `pmbus_drv_timer_1ms()`, which samples PMBUS_SCL once per millisecond and latches recovery when SCL stays low for `PMBUS_I2C_CLOCK_LOW_TIMEOUT_MS`. The actual bus-clear/re-open sequence still runs in `pmbus_drv_background_task()` so the timer ISR remains short.
+
+The 1 ms timeout sampler guards shared PMBus driver state by disabling/enabling only the I2C NVIC IRQ through `pmbus_io_i2c_irq_guard()`. It does not toggle the I2C peripheral interrupt enable bit.
+
+If the ordinary I2C timeout flag is pending when the I2C ISR runs, the driver clears the flag but still handles the current active I2C status before clearing SI. A timeout flag must not bypass `SLA_R_ACK`, `DATA_TX_ACK`, `DATA_RX_ACK`, or `STOP_RESTART`, because doing so can release SCL before DAT/RX state is updated.
+
+Normal slave-transmit endings are treated separately from real bus faults. If the I2C controller reports one `0x00` status immediately after `DATA_TX_NACK` / `LAST_TX_ACK`, the driver treats it as TX cleanup and does not latch CML, ALERT#, ARA, or recovery. A genuinely stuck bus is still handled by the software SCL-low timeout and bus-clear path.
+
+Command-only repeated-start reads use the normal SMBus combined-format flow. `STOP_RESTART` only saves the pending command context; `SLA_R_ACK` restores that context, dispatches/prepares the PMBus response, writes the first response byte to I2C DAT, and then advances the TX index. The read address byte (`0xB5` for target `0x5A`) must never appear as PMBus response data on the logic analyzer.
+
 The main loop dispatches:
 
 - Timer service tasks
@@ -98,6 +116,8 @@ The implementation is intended to align with these documents:
 
 - `docs/PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf` in the Pico HID Test Tool workspace
 - `docs/PMBus_rev_1.2_part_1_september_2010.pdf` in the Pico HID Test Tool workspace
+- `docs/M-CRPS_Base_Specification_version_1p06p00_RC1-draft7_042026.pdf` in the Pico HID Test Tool workspace, for the optional CRPS product-profile command overlay
+- `docs/UCD90xxx Sequencer and System Health Controller PMBus Command Reference.pdf` in the Pico HID Test Tool workspace, for the TI UCD90xxx command-name profile namespace
 
 Supported transaction formats include:
 
@@ -117,6 +137,17 @@ Supported transaction formats include:
 - SMBALERT#/ARA flow
 - SMBus ARP placeholder flow
 - PMBus Zone read/write alias flow
+
+Profile policy:
+
+- The base PMBus profile follows `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf` and `PMBus_rev_1.2_part_1_september_2010.pdf`; it does not assign product meaning to generic `USER_DATA_*` or unowned `MFR_SPECIFIC_*` commands.
+- The CRPS profile is enabled by `PMBUS_ENABLE_CMD_CRPS` and maps the public `M-CRPS_Base_Specification_version_1p06p00_RC1-draft7_042026.pdf` Table 12-38 command names to deterministic placeholder/shadow handlers.
+- `PMBUS_COMMAND_PROFILE` selects the profile-specific command-name namespace used by debug logs and support reporting. It is intentionally separate from `PMBUS_ENABLE_CMD_CRPS` and `PMBUS_PROFILE_MINIMAL/FULL`.
+  - Base example: `0xE3 -> MFR_SPECIFIC_E3`
+  - M-CRPS example: `0xE3 -> MFR_FWUPLOAD_BLOCK_SIZE`
+  - TI UCD90xxx example: `0xE3 -> PARM_VALUE`
+- CRPS placeholder values are intentionally stable for host validation; source comments mark where real PSU telemetry, inventory, blackbox, firmware-upload, LED, timing, and protection policy must be connected later.
+- UCD90xxx command names are available through `PMBUS_COMMAND_PROFILE_TI_UCD90XXX`. Target-specific UCD90xxx device emulation remains product/application policy and should be implemented separately from the common PMBus transport.
 
 Command support and validation status are tracked in:
 
@@ -141,8 +172,8 @@ Hardware wiring with the Pico HID Test Tool as PMBus master:
 
 | Pico signal | Pico pin | M031 signal | M031 pin |
 | --- | --- | --- | --- |
-| PMBus SDA | GP20 | PMBUS_SDA | PB4 |
-| PMBus SCL | GP21 | PMBUS_SCL | PB5 |
+| PMBus SDA | GP20 | PMBUS_SDA | PB4 default profile |
+| PMBus SCL | GP21 | PMBUS_SCL | PB5 default profile |
 | PMBus ALERT# | GP14 | PMBUS_ALERT# | PB6 |
 | GND | GND | GND | GND |
 
@@ -152,12 +183,13 @@ Recommended validation flow:
 2. Open UART0 debug log at 115200 8N1.
 3. Connect Pico HID Test Tool.
 4. Open the PMBus tab.
-5. Set address to `0x5A`.
-6. Enable PEC.
-7. Enable PMBus master.
-8. Run `Scan`.
-9. Run quick-test groups in order: `Basic`, `PEC`, `Error`, `Telemetry`, `Full`.
-10. Confirm the tool log and MCU UART log match expected command, protocol, PEC, and payload behavior.
+5. Select the Pico GUI profile that matches `PMBUS_COMMAND_PROFILE`; the sample default is `PMBus Base`.
+6. Set address to `0x5A`.
+7. Enable PEC.
+8. Enable PMBus master.
+9. Run `Scan`.
+10. Run quick-test groups in order: `Basic`, `PEC`, `Error`, `Telemetry`, `MFR`, `Full`.
+11. Confirm the tool log and MCU UART log match expected command, protocol, PEC, and payload behavior.
 
 ## Expected Validation Signals
 
@@ -167,11 +199,15 @@ A healthy scan should identify the device and read at least:
 - `MFR_ID`
 - `MFR_MODEL`
 
+During a healthy scan, the UART log should not show `PMBus slave recover addr7=... reason=2` or automatic ARA alias enable immediately after normal read responses.
+
 A healthy basic checklist should pass bus ACK, repeated START read, common write/readback, VOUT mode, and status reads.
 
 A healthy PEC checklist should pass PEC-enabled read byte, read word, block read, and bad-PEC negative-path behavior.
 
 A healthy telemetry checklist should decode fixed or shadow telemetry values and report PEC OK.
+
+A healthy MFR checklist should validate the selected profile namespace. In the sample Base profile, this means representative `USER_DATA_*` and generic `MFR_SPECIFIC_*` volatile shadows.
 
 Manual checklist items remain manual when they require external board behavior, power-stage behavior, or logic-analyzer confirmation.
 
@@ -243,8 +279,25 @@ SampleCode/Template/pmbus/pmbus_protocol.h
 
 `pmbus_protocol.h` holds fixed protocol constants such as `PMBUS_STATUS_*`, firmware-upload status bits, blackbox size, and `PMBUS_I2C_STATUS_*` ISR state codes. These values are used by the framework and should not be treated as user-configurable settings.
 
+Profile selection has two separate layers:
+
+- `PMBUS_COMMAND_PROFILE` selects the command-name namespace, profile-specific command ownership, and debug/support display names. This should match the Pico GUI PMBus profile selected during validation.
+- `PMBUS_PROFILE` selects the compiled command group size. Keep `PMBUS_PROFILE_FULL` for standards/profile validation unless flash size forces a smaller build.
+
+Recommended validation mapping:
+
+| Pico GUI profile | M032 compile setting | Notes |
+| --- | --- | --- |
+| `PMBus Base` | `PMBUS_COMMAND_PROFILE_BASE` | Uses PMBus specification names, including generic `USER_DATA_*` and `MFR_SPECIFIC_*` names. |
+| `M-CRPS` | `PMBUS_COMMAND_PROFILE_M_CRPS` | Uses M-CRPS command names and enables the CRPS command overlay through `PMBUS_ENABLE_CMD_CRPS`. |
+| `TI UCD90xxx` | `PMBUS_COMMAND_PROFILE_TI_UCD90XXX` | Uses TI UCD90xxx display names. Target-specific emulation remains profile/application policy. |
+
 | Define | Default | Purpose |
 | --- | --- | --- |
+| `PMBUS_COMMAND_PROFILE` | `PMBUS_COMMAND_PROFILE_BASE` | Selects the compile-time command profile namespace. Valid values are `PMBUS_COMMAND_PROFILE_BASE`, `PMBUS_COMMAND_PROFILE_M_CRPS`, and `PMBUS_COMMAND_PROFILE_TI_UCD90XXX`. |
+| `PMBUS_COMMAND_PROFILE_BASE` | `1U` | Base PMBus command namespace from the public PMBus command specification. |
+| `PMBUS_COMMAND_PROFILE_M_CRPS` | `2U` | M-CRPS public command namespace and CRPS overlay selection. |
+| `PMBUS_COMMAND_PROFILE_TI_UCD90XXX` | `3U` | TI UCD90xxx command namespace for profile-specific debug/support names. |
 | `PMBUS_PROFILE` | `PMBUS_PROFILE_FULL` | Selects the default command group set. Use `PMBUS_PROFILE_MINIMAL` for smaller flash targets. |
 | `PMBUS_PROFILE_MINIMAL` | `1U` | Enables core, status, telemetry, and basic manufacturer ID commands only. |
 | `PMBUS_PROFILE_FULL` | `2U` | Enables the full PoC command surface, including limits, fan, energy, page-plus, zone, policy, ARP, and firmware-upload placeholders. |
@@ -256,10 +309,12 @@ SampleCode/Template/pmbus/pmbus_protocol.h
 | `PMBUS_ENABLE_CMD_ENERGY` | Profile derived | `READ_EIN`, `READ_EOUT`, and energy rollover shadows. |
 | `PMBUS_ENABLE_CMD_MFR_BASIC` | Profile derived | `MFR_ID`, `MFR_MODEL`, `MFR_REVISION`, `MFR_SERIAL`. |
 | `PMBUS_ENABLE_CMD_MFR_EXT` | Profile derived | Extended manufacturer placeholder commands, blackbox, and cold-redundancy shadow. |
-| `PMBUS_ENABLE_CMD_PAGE_PLUS` | Profile derived | `PAGE_PLUS_WRITE`, `PAGE_PLUS_READ`, and `COEFFICIENTS` placeholder support. |
+| `PMBUS_ENABLE_CMD_PAGE_PLUS` | Profile derived | `PAGE_PLUS_WRITE` and `PAGE_PLUS_READ` portable wrapper support. |
+| `PMBUS_ENABLE_CMD_COEFFICIENTS` | Profile derived | `COEFFICIENTS` Direct-format coefficient support. Default `m=1`, `b=0`, `R=3` makes Direct raw words represent millivolts. |
 | `PMBUS_ENABLE_CMD_ZONE` | Profile derived | `ZONE_CONFIG` and `ZONE_ACTIVE` standard command support. |
 | `PMBUS_ENABLE_CMD_POLICY` | Profile derived | Volatile `USER_DATA`, unassigned MFR-specific, and extended selector policy shadows. |
 | `PMBUS_ENABLE_CMD_FWUPLOAD` | Profile derived | Vendor firmware-upload placeholder command flow. Production bootloader/storage is not implemented. |
+| `PMBUS_ENABLE_CMD_CRPS` | Command-profile derived | Enabled when `PMBUS_COMMAND_PROFILE_M_CRPS` is selected and `PMBUS_ENABLE_CMD_MFR_EXT` is enabled; otherwise disabled by default. |
 
 Profile defaults:
 
@@ -310,6 +365,7 @@ PEC and debug settings:
 | `PMBUS_DEBUG_PRINT_TX_READY` | `1U` | Prints prepared TX frames. |
 | `PMBUS_DEBUG_PRINT_TX_DECODE` | `1U` | Adds decoded telemetry/string values to TX logs. |
 | `PMBUS_DEBUG_PRINT_WRITE_DONE` | `1U` | Prints completed write command summaries. |
+| `PMBUS_DEBUG_PRINT_SEMANTICS` | `0U` | Enables background bit/field semantic hook logs after successful command dispatch when set to `1U`. The sample default keeps it off to reduce UART bandwidth during timing validation. |
 | `PMBUS_DEBUG_PRINT_STATUS` | `0U` | Optional low-level I2C status logging. Usually kept off to avoid log noise. |
 
 Buffer and recovery settings:
@@ -320,21 +376,25 @@ Buffer and recovery settings:
 | `PMBUS_TX_BUFFER_SIZE` | `34U` | Fixed TX buffer size, sized for 32-byte block data plus count/PEC headroom. |
 | `PMBUS_MAX_BLOCK_SIZE` | `32U` | Maximum PMBus block payload length. |
 | `PMBUS_DEBUG_QUEUE_SIZE` | `16U` | Background debug event queue depth. |
+| `PMBUS_SEMANTIC_QUEUE_SIZE` | `16U` | Background semantic hook queue depth. Increase this if a checklist burst reports dropped semantic events. |
 | `PMBUS_ENABLE_SLAVE_RECOVER` | `1U` | Enables stuck-bus / timeout recovery path. |
 | `PMBUS_I2C_BUS_CLEAR_PULSES` | `9U` | SCL pulses used for bus-clear recovery. |
 | `PMBUS_I2C_BUS_CLEAR_RETRY_COUNT` | `3U` | Bus-clear retry attempts. |
 | `PMBUS_I2C_RECOVER_MAX_ATTEMPTS` | `3U` | Maximum PMBus slave recover attempts before fail event. |
 | `PMBUS_I2C_RECOVER_BACKOFF_CYCLES` | `2U` | Background-task backoff cycles before recover. |
 | `PMBUS_I2C_STUCK_BUS_RETRY_CYCLES` | `8U` | Debounce count before stuck-bus recovery is requested. |
+| `PMBUS_I2C_CLOCK_LOW_TIMEOUT_MS` | `35U` | Software SCL-low timeout threshold sampled from the 1 ms timer ISR. |
 | `PMBUS_I2C_TIMEOUT_RECOVER_THRESHOLD` | `1U` | Timeout flag threshold before recovery. |
 | `PMBUS_I2C_BUS_ERROR_RECOVER_THRESHOLD` | `1U` | Bus-error threshold before recovery. |
 
-`board_config.h` holds the platform porting contract. For a new MCU family, keep the PMBus common files unchanged and port these macros:
+`board_config.h` holds the platform porting contract. For a new MCU family or another I2C instance, keep the PMBus common files unchanged and select or add a `PMBUS_PORT_PROFILE` in `board_config.h`.
 
 | Define group | Current M031 value / behavior |
 | --- | --- |
+| Port profile | Default `PMBUS_PORT_PROFILE_M031_I2C0_PB4_PB5`; alternate example `PMBUS_PORT_PROFILE_M031_I2C1_PA2_PA3`. |
 | Address defaults | `PMBUS_DEFAULT_ADDRESS_A0_LEVEL=0U`, `PMBUS_DEFAULT_ADDRESS_A1_LEVEL=1U`, resulting in default 7-bit address `0x5A`. |
-| I2C instance | `PMBUS_PORT_I2C_INSTANCE=I2C0`, `PMBUS_PORT_I2C_MODULE=I2C0_MODULE`, `PMBUS_PORT_I2C_IRQn=I2C0_IRQn`. |
+| I2C instance | Selected by profile through `PMBUS_PORT_I2C_INSTANCE`, `PMBUS_PORT_I2C_MODULE`, `PMBUS_PORT_I2C_IRQn`, and `PMBUS_PORT_I2C_IRQHandler`. |
+| Pin names | Selected by profile through `PMBUS_PORT_I2C_NAME`, `PMBUS_PORT_SCL_PIN_NAME`, `PMBUS_PORT_SDA_PIN_NAME`, and `PMBUS_PORT_ALERT_PIN_NAME`. |
 | Bus clock | `PMBUS_PORT_I2C_BUS_CLOCK=400000UL`. |
 | ISR contract | `PMBUS_PORT_I2C_IRQHandler` and `PMBUS_PORT_I2C_ISR_PROTOTYPE`. |
 | Debug print | `PMBUS_DEBUG_PRINT=printf`. |
@@ -347,6 +407,14 @@ Buffer and recovery settings:
 Debug logging is intentionally human-readable and command-aware. RX debug frames include command byte and command name when known. TX debug logs should print decoded values for telemetry commands so GUI logs can be correlated with MCU-side source values.
 
 Do not print from timing-critical ISR paths. Queue or capture data in ISR and print from background processing.
+
+Bit/field semantic logs are emitted by `pmbus_semantics.c` after successful command dispatch. They are intended as product-integration hooks:
+
+- Standard bit-defined commands such as `OPERATION`, `ON_OFF_CONFIG`, `VOUT_MODE`, `FAN_CONFIG_*`, `*_FAULT_RESPONSE`, `STATUS_*`, and `SMBALERT_MASK` print each known bit/field and a `TODO` hook.
+- Profile-specific commands print the active profile command name, for example Base `MFR_SPECIFIC_E3`, M-CRPS `MFR_FWUPLOAD_BLOCK_SIZE`, or TI UCD90xxx `PARM_VALUE`.
+- If a new profile command has documented bit fields, add a dedicated semantic handler in `pmbus_semantics.c` before marking that profile behavior complete.
+- Product actions such as ADC sampling, GPIO control, fan PWM, NVM persistence, and shutdown/retry policy must be added at the printed hook points. The semantic log only proves the firmware recognized the PMBus bit/field.
+- If the log reports dropped semantic events, increase `PMBUS_SEMANTIC_QUEUE_SIZE` or reduce the checklist burst rate.
 
 RX debug logs use two lines:
 
@@ -400,6 +468,11 @@ Pico HID Test Tool repository: docs/PMBUS_TABLE31_GAP_MATRIX.md
 
 | Date | Change |
 | --- | --- |
+| 2026/06/26 | Removed the command-read prefetch path from the SMBus slave flow. Command-only repeated-start reads now save pending context at `STOP_RESTART` and dispatch/prepare the response at `SLA_R_ACK`. |
+| 2026/06/26 | Set the sample command profile default to `PMBUS_COMMAND_PROFILE_BASE`, kept semantic logging disabled by default, and documented the NVIC-only timeout guard. |
+| 2026/06/25 | Guarded the normal slave-transmit NACK/STOP cleanup path so a single post-TX `0x00` controller status does not trigger CML/ALERT#/ARA or bus-error recovery during scan reads. |
+| 2026/06/25 | Documented compile-time `PMBUS_COMMAND_PROFILE` choices and the expected Pico GUI profile mapping. |
+| 2026/06/24 | Split PMBus board binding into selectable `PMBUS_PORT_PROFILE` entries so the PMBus core can move from I2C0/PB4/PB5 to I2C1/PA2/PA3 without changing protocol or dispatch files. |
 | 2026/06/18 | Documented PMBus profile, command-group, PEC policy/backend, debug, alias/recovery, and platform porting defines; updated PMBus transaction and alias/recovery flow charts. |
 | 2026/06/14 | Initial GitHub README draft created from MCU README template. |
 
@@ -440,14 +513,15 @@ flowchart TD
     D -->|SLA+W| E[ISR receives command, payload, optional PEC]
     E --> F{STOP or repeated START}
     F -->|STOP| G{Write-only frame}
-    F -->|Repeated START| H[Restore pending request context]
+    F -->|Repeated START| J[Save pending command context]
     G -->|Yes| I[Parse and dispatch write transaction]
-    G -->|No| J[Keep command-only frame pending]
-    H --> K[Parse read transaction]
+    G -->|No| J
 
-    D -->|SLA+R| L{Prepared response exists}
-    L -->|Yes| M[Load prepared TX byte]
+    D -->|SLA+R| L{Pending command context exists}
+    L -->|Yes| H[Restore pending request context]
+    H --> K[Parse read transaction]
     L -->|No| N[Prepare default read from last command]
+    M[Load first TX byte into I2C DAT]
 
     I --> O{PEC policy}
     K --> O
@@ -470,7 +544,7 @@ flowchart TD
     ZW --> Y
     M --> AA[ISR shifts TX bytes]
     AA --> AB[Master NACK or STOP]
-    AB --> AC[Release request state and queue debug event]
+    AB --> AC[Update request state and queue debug event]
     Y --> AC
     J --> AC
     S --> AC

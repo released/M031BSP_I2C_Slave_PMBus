@@ -104,6 +104,11 @@ void pmbus_io_i2c_interrupt(unsigned char enable_state)
     }
 }
 
+void pmbus_io_i2c_irq_guard(unsigned char enable_state)
+{
+    pmbus_io_i2c_interrupt(enable_state);
+}
+
 void pmbus_io_i2c_timeout(unsigned char enable_state)
 {
     switch (enable_state)

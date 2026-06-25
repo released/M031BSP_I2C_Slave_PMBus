@@ -37,6 +37,23 @@
 #define PMBUS_PROFILE_MINIMAL                 1U
 #define PMBUS_PROFILE_FULL                    2U
 
+#define PMBUS_COMMAND_PROFILE_BASE            1U
+#define PMBUS_COMMAND_PROFILE_M_CRPS          2U
+#define PMBUS_COMMAND_PROFILE_TI_UCD90XXX     3U
+
+/*
+    Command profile selection controls profile-specific command names and
+    policy namespace interpretation. It is intentionally separate from
+    PMBUS_PROFILE_MINIMAL/FULL, which controls feature size.
+    - BASE: PMBus specification names for USER_DATA/MFR_SPECIFIC ranges.
+    - M_CRPS: M-CRPS public profile names and CRPS overlay rows.
+    - TI_UCD90XXX: TI UCD90xxx profile display names; target-specific
+      device emulation remains product/application policy.
+*/
+#ifndef PMBUS_COMMAND_PROFILE
+#define PMBUS_COMMAND_PROFILE                 PMBUS_COMMAND_PROFILE_BASE
+#endif
+
 /*
     Profile selection:
     - PMBUS_PROFILE_FULL keeps the full PoC command surface enabled.
@@ -64,6 +81,7 @@
 #define PMBUS_PROFILE_DEFAULT_CMD_MFR_BASIC   1U
 #define PMBUS_PROFILE_DEFAULT_CMD_MFR_EXT     0U
 #define PMBUS_PROFILE_DEFAULT_CMD_PAGE_PLUS   0U
+#define PMBUS_PROFILE_DEFAULT_CMD_COEFFICIENTS 1U
 #define PMBUS_PROFILE_DEFAULT_CMD_ZONE        0U
 #define PMBUS_PROFILE_DEFAULT_CMD_POLICY      0U
 #define PMBUS_PROFILE_DEFAULT_CMD_FWUPLOAD    0U
@@ -79,6 +97,7 @@
 #define PMBUS_PROFILE_DEFAULT_CMD_MFR_BASIC   1U
 #define PMBUS_PROFILE_DEFAULT_CMD_MFR_EXT     1U
 #define PMBUS_PROFILE_DEFAULT_CMD_PAGE_PLUS   1U
+#define PMBUS_PROFILE_DEFAULT_CMD_COEFFICIENTS 1U
 #define PMBUS_PROFILE_DEFAULT_CMD_ZONE        1U
 #define PMBUS_PROFILE_DEFAULT_CMD_POLICY      1U
 #define PMBUS_PROFILE_DEFAULT_CMD_FWUPLOAD    1U
@@ -100,7 +119,8 @@
     - MFR_BASIC: required identity strings such as MFR_ID/MODEL/REVISION/SERIAL.
     - MFR_EXT: optional manufacturer data, blackbox, cold redundancy, and
       extended identity/capability commands.
-    - PAGE_PLUS: PAGE_PLUS_READ/WRITE and COEFFICIENTS support.
+    - PAGE_PLUS: PAGE_PLUS_READ/WRITE support.
+    - COEFFICIENTS: Direct-format coefficient support.
     - ZONE: PMBus Zone config/active commands.
     - POLICY: USER_DATA and SMBALERT_MASK policy table support.
     - FWUPLOAD: placeholder manufacturer firmware upload command set.
@@ -141,6 +161,10 @@
 #define PMBUS_ENABLE_CMD_PAGE_PLUS            PMBUS_PROFILE_DEFAULT_CMD_PAGE_PLUS
 #endif
 
+#ifndef PMBUS_ENABLE_CMD_COEFFICIENTS
+#define PMBUS_ENABLE_CMD_COEFFICIENTS         PMBUS_PROFILE_DEFAULT_CMD_COEFFICIENTS
+#endif
+
 #ifndef PMBUS_ENABLE_CMD_ZONE
 #define PMBUS_ENABLE_CMD_ZONE                 PMBUS_PROFILE_DEFAULT_CMD_ZONE
 #endif
@@ -151,6 +175,14 @@
 
 #ifndef PMBUS_ENABLE_CMD_FWUPLOAD
 #define PMBUS_ENABLE_CMD_FWUPLOAD             PMBUS_PROFILE_DEFAULT_CMD_FWUPLOAD
+#endif
+
+#ifndef PMBUS_ENABLE_CMD_CRPS
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_M_CRPS)
+#define PMBUS_ENABLE_CMD_CRPS                 PMBUS_ENABLE_CMD_MFR_EXT
+#else
+#define PMBUS_ENABLE_CMD_CRPS                 0U
+#endif
 #endif
 
 #define PMBUS_PEC_POLICY_DISABLED             0U
@@ -193,22 +225,51 @@
 #define PMBUS_DEBUG_PRINT_TX_READY            1U
 #define PMBUS_DEBUG_PRINT_TX_DECODE           1U
 #define PMBUS_DEBUG_PRINT_WRITE_DONE          1U
+#define PMBUS_DEBUG_PRINT_SEMANTICS           0U
 #define PMBUS_DEBUG_PRINT_STATUS              0U
+
+#ifndef PMBUS_SEMANTIC_QUEUE_SIZE
+#define PMBUS_SEMANTIC_QUEUE_SIZE             16U
+#endif
+
+#define PMBUS_SYSTEM_POLICY_CRPS_DEFAULT      1U
+#define PMBUS_SYSTEM_POLICY_LAB_VALIDATION    2U
+/*
+    System policy selection:
+    - CRPS_DEFAULT keeps optional SMBus/PMBus lab helpers disabled unless a
+      final product requirement explicitly enables them.
+    - LAB_VALIDATION keeps ARA/ARP helper paths available so the Pico PMBus
+      tester can validate edge cases during bring-up.
+*/
+#ifndef PMBUS_SYSTEM_POLICY
+#define PMBUS_SYSTEM_POLICY                   PMBUS_SYSTEM_POLICY_LAB_VALIDATION
+#endif
+
+#if (PMBUS_SYSTEM_POLICY == PMBUS_SYSTEM_POLICY_CRPS_DEFAULT)
+#define PMBUS_POLICY_DEFAULT_ARA_ALIAS        0U
+#define PMBUS_POLICY_DEFAULT_ARP              0U
+#else
+#define PMBUS_POLICY_DEFAULT_ARA_ALIAS        1U
+#define PMBUS_POLICY_DEFAULT_ARP              PMBUS_PROFILE_DEFAULT_ARP
+#endif
 
 /*
     Runtime protocol service switches:
     - PMBUS_ENABLE_SLAVE_RECOVER enables I2C slave bus-clear/re-init recovery.
-    - PMBUS_ENABLE_ARA_ALIAS enables the Alert Response Address workaround
+    - PMBUS_ENABLE_ARA_ALIAS enables the lab Alert Response Address workaround
       when the MCU cannot expose a true second hardware slave address.
-    - PMBUS_ENABLE_ARP enables SMBus ARP command handling.
+    - PMBUS_ENABLE_ARP enables SMBus ARP/UDID command handling.
     - PMBUS_ENABLE_ZONE_ALIAS enables extra Zone read/write I2C alias address
       handling when supported by the platform I2C port.
 */
 #define PMBUS_ENABLE_SLAVE_RECOVER            1U
-#define PMBUS_ENABLE_ARA_ALIAS                1U
+
+#ifndef PMBUS_ENABLE_ARA_ALIAS
+#define PMBUS_ENABLE_ARA_ALIAS                PMBUS_POLICY_DEFAULT_ARA_ALIAS
+#endif
 
 #ifndef PMBUS_ENABLE_ARP
-#define PMBUS_ENABLE_ARP                      PMBUS_PROFILE_DEFAULT_ARP
+#define PMBUS_ENABLE_ARP                      PMBUS_POLICY_DEFAULT_ARP
 #endif
 
 #ifndef PMBUS_ENABLE_ZONE_ALIAS
@@ -234,6 +295,7 @@
 #define PMBUS_I2C_RECOVER_MAX_ATTEMPTS               3U
 #define PMBUS_I2C_RECOVER_BACKOFF_CYCLES             2U
 #define PMBUS_I2C_STUCK_BUS_RETRY_CYCLES             8U
+#define PMBUS_I2C_CLOCK_LOW_TIMEOUT_MS               35U
 #define PMBUS_I2C_TIMEOUT_RECOVER_THRESHOLD          1U
 #define PMBUS_I2C_BUS_ERROR_RECOVER_THRESHOLD        1U
 

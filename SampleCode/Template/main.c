@@ -298,6 +298,7 @@ void TMR1_IRQHandler(void)
 		// }	
 
         TimerService_Tick1ms();
+        pmbus_drv_timer_1ms();
     }
 }
 
@@ -487,11 +488,8 @@ int main()
     TimerService_CreateTask();
     pmbus_platform_init();
     /*
-        PMBus pin assignment:
-        PB.5 : I2C0_SCL
-        PB.4 : I2C0_SDA
-        PB.6 : ALERT#
-        A0/A1: default strap level from board_config.h, not GPIO sampled
+        PMBus port/pin assignment is selected in board_config.h.
+        Keep PMBus core files unchanged when moving from I2C0 to I2C1/I2C2.
     */
     pmbus_drv_init();
 

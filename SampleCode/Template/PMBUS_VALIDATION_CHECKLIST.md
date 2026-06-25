@@ -1,4 +1,4 @@
-# PMBus Validation Checklist
+﻿# PMBus Validation Checklist
 
 This checklist is derived from `PMBUS_SUPPORT_MATRIX.md`.
 
@@ -6,6 +6,10 @@ Compliance target:
 - Validate this M032 PMBus slave against:
   - `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf`
   - `PMBus_rev_1.2_part_1_september_2010.pdf`
+- Profile-specific validation references:
+  - Base profile: `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf` plus `PMBus_rev_1.2_part_1_september_2010.pdf`
+  - M-CRPS profile: `M-CRPS_Base_Specification_version_1p06p00_RC1-draft7_042026.pdf`
+  - TI UCD90xxx profile: `UCD90xxx Sequencer and System Health Controller PMBus Command Reference.pdf` (first-stage command-name/profile support; full chip validation remains product-specific)
 - A PASS means the observed bus protocol, payload, PEC, status/error response, and side effect match the documented behavior.
 - If a command is currently a placeholder/shadow, PASS only covers host-visible communication behavior; product-complete CRPS behavior remains open until the real source/control path is connected.
 - Keep this checklist synchronized with the Pico GUI `Full` checklist and `PMBUS_SUPPORT_MATRIX.md`.
@@ -18,8 +22,26 @@ Use assumptions:
 - `Write address byte = 0xB4`, `Read address byte = 0xB5`.
 - PEC behavior follows `PMBUS_PEC_POLICY`; optional mode accepts host PEC when present and always generates slave read PEC.
 - Logic analyzer should decode I2C/SMBus with repeated START enabled.
+- I2C instance and pin binding come from `PMBUS_PORT_PROFILE` in `board_config.h`; changing the port profile must not require edits in PMBus protocol, dispatch, or application command files.
+- `PMBUS_SYSTEM_POLICY_CRPS_DEFAULT` disables ARA/ARP helpers unless product requirements explicitly enable them.
+- `PMBUS_SYSTEM_POLICY_LAB_VALIDATION` enables ARA/ARP helper paths for Pico tool edge-case validation.
+- `PMBUS_COMMAND_PROFILE` changes command display/debug names only; verify representative profile names when switching it:
+  - Base: `0xE3 -> MFR_SPECIFIC_E3`
+  - M-CRPS: `0xE3 -> MFR_FWUPLOAD_BLOCK_SIZE`
+  - TI UCD90xxx: `0xE3 -> PARM_VALUE`
+- `PMBUS_DEBUG_PRINT_SEMANTICS` should be enabled when validating profile bit/field coverage.
+  - Expected: standard bit-defined commands print recognized bit/field names from background context.
+  - Expected: profile-specific commands print the selected profile command name.
+  - If `PMBus semantic log dropped ... event(s)` appears, increase `PMBUS_SEMANTIC_QUEUE_SIZE` or slow the checklist burst before using the semantic log as coverage evidence.
 
 ## 1. Bus Basics
+
+### 1.0 Port Profile Sanity
+
+- Build/run with default `PMBUS_PORT_PROFILE_M031_I2C0_PB4_PB5`.
+  - Expected: SDA/SCL are PB4/PB5, ISR symbol is `I2C0_IRQHandler`, and basic PMBus read/write validation still passes.
+- If validating the alternate M031 profile, set `PMBUS_PORT_PROFILE=PMBUS_PORT_PROFILE_M031_I2C1_PA2_PA3`.
+  - Expected: SDA/SCL move to PA2/PA3, ISR symbol is `I2C1_IRQHandler`, SCL-low timeout and bus-clear still use the selected profile macros, and PMBus command behavior is unchanged.
 
 - Verify `SCL` and `SDA` idle high.
 - Verify slave ACK on:
@@ -27,7 +49,31 @@ Use assumptions:
   - `SLA+R`
 - Verify repeated START path:
   - `S B4 A <CMD> A Sr B5 A ...`
+- Verify command-only repeated-start reads load valid response data at the start of the `SLA_R_ACK` ISR path:
+  - `PMBUS_REVISION (0x98) -> 33 AF`
+  - `OPERATION (0x01) -> 80 2C` after writing `0x80`
+  - `ON_OFF_CONFIG (0x02) -> 1A 5E`
+  - `0xB5` must not appear as a response data byte for target address `0x5A`
+  - `B5 AF` / `B5 CE` means the response buffer and PEC were prepared, but the first data byte was not loaded early enough
+  - `B5 33` means the active `SLA_R_ACK` handler was bypassed or released SI before loading DAT, commonly due to a pending timeout flag skipping the status handler
 - Verify no debug `printf` occurs inside the ISR path.
+
+### 1.1 Bit / Field Semantic Hook Sanity
+
+- Build with `PMBUS_DEBUG_PRINT_SEMANTICS = 1U`.
+- Execute representative standard commands:
+  - Write/read `OPERATION (0x01)`
+  - Write/read `ON_OFF_CONFIG (0x02)`
+  - Read `VOUT_MODE (0x20)`
+  - Write/read `FAN_CONFIG_1_2 (0x3A)`
+  - Read `STATUS_BYTE (0x78)` and `STATUS_WORD (0x79)`
+- Expected: logs include each recognized bit/field plus a product hook or status-source note.
+- Execute one profile-specific command in each selected profile build:
+  - Base profile example: `0xE3 -> MFR_SPECIFIC_E3`
+  - M-CRPS profile example: `0xE3 -> MFR_FWUPLOAD_BLOCK_SIZE`
+  - TI UCD90xxx profile example: `0xE3 -> PARM_VALUE`
+- Expected: semantic logs use the active profile command name.
+- A command that has documented bit fields in its profile document is not profile-complete until a dedicated semantic handler exists for those bits.
 
 ## 2. Byte Read / Write Commands
 
@@ -62,6 +108,15 @@ Use assumptions:
 - `VOUT_MODE (0x20)`
   - Read Byte
   - Expected default `0x17`
+  - Write valid Table 2 values:
+    - ULINEAR16 absolute or relative
+    - VID
+    - Direct with parameter bits `0`
+    - IEEE half with parameter bits `0`
+  - Expected: valid values read back unchanged
+  - Write invalid Direct / IEEE half values with non-zero parameter bits
+  - Expected: command is rejected through invalid-data CML behavior
+  - Note: Direct and IEEE-half conversion are implemented at the PMBus format layer; VID remains a right-justified raw code until a product VID table is assigned
 - `POWER_MODE (0x34)`
   - Write Byte, then Read Byte
   - Expected: readback matches last written value
@@ -98,6 +153,8 @@ Use assumptions:
   - Write Word, then Read Word
   - Expected: readback matches last written value
   - Verify `Process Call` also echoes updated word
+  - In ULINEAR16 / Direct / IEEE-half `VOUT_MODE`, verify the written word is decoded into the internal mV shadow and `READ_VOUT` follows that value
+  - In VID `VOUT_MODE`, verify the command word is accepted as a valid right-justified raw VID code and read back/mirrored until a product VID table is assigned
 - VOUT programming shadows:
   - `VOUT_TRIM (0x22)`
   - `VOUT_CAL_OFFSET (0x23)`
@@ -240,7 +297,8 @@ Use assumptions:
   - `READ_POUT (0x96)`
   - `READ_PIN (0x97)`
 - Expected:
-  - `READ_VOUT` uses ULINEAR16 with `VOUT_MODE`
+  - `READ_VOUT` is decoded by the active `VOUT_MODE` Table 2 selector
+  - ULINEAR16/Direct/IEEE modes return numeric voltage through the internal mV source; VID remains a product-table raw-code hook
   - current/power/temperature/fan use LINEAR11
 
 ## 6. Block Read Commands
@@ -289,7 +347,7 @@ Use assumptions:
   - Expected:
     - response block count `0x05`
     - five coefficient bytes are returned in DIRECT-format order
-  - Note: current values are fixed placeholders; replace with real DIRECT coefficients only if product exposes DIRECT-format commands
+  - Note: current default coefficients are `m=1`, `b=0`, `R=3`, so Direct raw voltage words represent millivolts; replace only if product Direct scaling differs
 - `PAGE_PLUS_WRITE (0x05)`
   - Execute Block Write with block count including page byte, target command byte, and target payload
   - Recommended target: `0x01 OPERATION`
@@ -357,8 +415,12 @@ Use assumptions:
   - Expected: readback matches the written bytes, truncated to 16 bytes if a longer block was attempted
   - Verify `QUERY` reports supported read/write and non-numeric/block-style format
   - Note: current CRPS policy is volatile shadow only; persistence requires product/NVM binding
+- `MFR_EFFICIENCY_DATA (0xB3)`
+  - Block Read
+  - Expected: 8-byte placeholder block
+  - TODO: bind to measured or qualified efficiency table before product release
 - Unassigned `MFR_SPECIFIC_C4..FD`
-  - Keep existing product-specific commands `D0/D6/D7/D8/DC` on their dedicated behavior paths
+  - Keep M-CRPS assigned profile commands on their dedicated behavior paths
   - For at least one unassigned command, perform the same Block Write / Block Read / QUERY checks as `USER_DATA`
   - Expected: volatile 16-byte shadow behavior, reset on power cycle
 - `MFR_SPECIFIC_COMMAND_EXT (0xFE)` / `PMBUS_COMMAND_EXT (0xFF)`
@@ -370,12 +432,106 @@ Use assumptions:
 - `MFR_COLD_REDUNDANCY_CONFIG (0xD0)`
   - Write Byte, then Read Byte
   - Expected: readback matches written value
+- `MFR_READ_CONFIG_FILE_SIZE (0xD1)`
+  - Block Read
+  - Expected: 4-byte placeholder
+  - TODO: bind to real config-image file-size metadata
+- `MFR_READ_CONFIG_BLOCK_SIZE (0xD2)`
+  - Read Word
+  - Expected: non-zero block-size placeholder
+  - TODO: bind to real config transport limit
+- `MFR_READ_CONFIG_FILE (0xD3)`
+  - Block Write-Read Process Call
+  - Expected: deterministic placeholder block response
+  - TODO: use request payload as real file offset/selector
+- `MFR_HW_COMPATIBILITY (0xD4)`
+  - Read Word
+  - Expected: stable placeholder value until the platform hardware compatibility policy is bound
+- `MFR_FWUPLOAD_CAPABILITY (0xD5)`
+  - Read Byte
+  - Expected: stable placeholder capability bits until bootloader/update capability is bound
 - `MFR_FWUPLOAD_MODE (0xD6)`
   - Write Byte, then Read Byte
   - Expected: mode bit follows write unless blocked by bad image/unsupported state
 - `MFR_FWUPLOAD (0xD7)`
   - Exercise valid block write sequence
   - Verify `MFR_FWUPLOAD_STATUS (0xD8)` transitions
+- `MFR_FW_REVISION (0xD9)`
+  - Block Read
+  - Expected: 7-byte placeholder until firmware build metadata is bound
+- `MFR_SPDM (0xDA)`
+  - Block Write-Read Process Call
+  - Expected: deterministic placeholder response
+  - TODO: bind to real SPDM command processor if product requires SPDM pass-through
+- `MFR_FRU_PROTECTION (0xDB)`
+  - Write Byte, then Read Byte, then restore original value
+  - Expected: volatile shadow readback matches the last written value
+- `MFR_BLACKBOX (0xDC)`
+  - Block Read
+  - Expected: current M032 reference returns a bounded 32-byte diagnostic snapshot
+  - Note: full M-CRPS long blackbox storage remains product work
+- `MFR_REAL_TIME_BLACK_BOX (0xDD)`
+  - Block Read and Block Write-Read Process Call
+  - Expected: 4-byte placeholder response until live fault snapshot binding is implemented
+- `MFR_SYSTEM_BLACK_BOX (0xDE)`
+  - Block Read and Block Write-Read Process Call
+  - Expected: bounded 32-byte placeholder response in the M032 reference
+  - Note: if the final product requires a larger profile response, add dedicated long-block storage first
+- `MFR_BLACK_BOX_CONFIG (0xDF)`
+  - Write Byte, then Read Byte, then restore original value
+  - Expected: volatile shadow readback matches the last written value
+- `MFR_CLEAR_BLACK_BOX (0xE0)`
+  - Write Byte
+  - Expected: ACK placeholder
+  - TODO: clear real product blackbox storage when storage is implemented
+- `MFR_LINE_STATUS (0xE1)`
+  - Write Byte, then Read Byte, then restore original value
+  - Expected: volatile shadow readback matches the last written value
+- `MFR_SYSTEM_LED_CNTL (0xE2)`
+  - Write Word, then Read Word, then restore original value
+  - Expected: volatile shadow readback matches the last written value
+- `MFR_FWUPLOAD_BLOCK_SIZE (0xE3)`
+  - Read Word
+  - Expected: non-zero placeholder
+  - TODO: bind to real firmware-upload block limit
+- `MFR_EN_STATUS_SIMULATION_CMD (0xE4)`
+  - Write Byte, then Read Byte, then restore original value
+  - Expected: volatile shadow readback matches the last written value
+- `MFR_PEAK_CURRENT_RECORD (0xE9)`
+  - Block Write, then Block Read, then restore original block
+  - Expected: volatile shadow readback matches the last written block
+  - TODO: bind to peak-current recorder
+- `MFR_COMPONENT_ID (0xEB)`
+  - Block Read
+  - Expected: 12-byte placeholder
+  - TODO: bind to real component identity data
+- `MFR_TOT_POUT_MAX (0xEC)`
+  - Read Word
+  - Expected: stable placeholder
+  - TODO: bind to line-status-specific total output power capability
+- `MFR_VOUT_MARGINING (0xED)`
+  - Write Word, then Read Word, then restore original value
+  - Expected: volatile shadow readback matches the last written value
+- `MFR_OCWPL1_SETTING (0xEE)`
+  - Block Write, then Block Read, then restore original block
+  - Expected: volatile shadow readback matches the last written block
+  - TODO: bind to over-current warning / power-limit policy
+- `MFR_PWOK_WARNING_TIME (0xF0)`
+  - Write Word, then Read Word, then restore original value
+  - Expected: Linear11 volatile shadow readback matches the last written value
+- `MFR_MAX_IOUT_CAPABILITY (0xF1)`
+  - Block Read
+  - Expected: 14-byte placeholder until the output-current capability table is bound
+- `MFR_FPC_MAIN_MIN_OFF_TIME (0xF2)`
+  - Write Word, then Read Word, then restore original value
+  - Expected: volatile shadow readback matches the last written value
+- `MFR_FPC_12VSB_MIN_OFF_TIME (0xF3)`
+  - Write Word, then Read Word, then restore original value
+  - Expected: volatile shadow readback matches the last written value
+- UCD90xxx command profile
+  - Not part of the default CRPS/M-CRPS validation checklist
+  - Validate under the `TI UCD90xxx` vendor profile to avoid manufacturer-command namespace conflicts
+  - Current automated scope is command naming/profile selection and standard PMBus transport reuse; full UCD90xxx device-model behavior remains TODO
 
 ## 9. PEC Validation
 
@@ -399,6 +555,15 @@ Use assumptions:
   - Expected: `STATUS_CML.INVALID_OR_UNSUPPORTED_DATA_RECEIVED`
 - Bus timeout / stuck-bus recovery
   - Verify recover event, recover fail event, and related `STATUS_WORD.OTHER` behavior
+  - When using the Pico tool `Full` checklist, verify the bus preflight log:
+    - `PMBus bus status: idle_before=..., recovered=..., idle_after=...`
+  - During normal `Scan`, verify `PMBUS_REVISION`, `MFR_ID`, and `MFR_MODEL` reads do not produce immediate `PMBus slave recover addr7=... reason=2` or ARA alias logs after slave-transmit completion
+  - Force SCL low externally for at least `PMBUS_I2C_CLOCK_LOW_TIMEOUT_MS` and verify log output:
+    - `PMBus software SCL-low timeout ms=35`
+    - `PMBus slave recover addr7=... reason=1`
+  - Forced clock-low timeout requires external fault injection and logic-analyzer timing review
+  - Do not validate this target by reading hardware SMBus Bus Management / PEC registers; the selected M032 target does not rely on `I2C_BUSCTL`, `I2C_BUSTCTL`, `I2C_BUSSTS`, `I2C_PKTSIZE`, `I2C_PKTCRC`, `I2C_BUSTOUT`, or `I2C_CLKTOUT`
+  - PEC, block count, ARA/ARP, and error/status behavior must be validated at the PMBus/SMBus transaction layer
 
 ## 11. Transaction Examples
 
@@ -417,9 +582,11 @@ Use assumptions:
 - `COEFFICIENTS 0x30` block write-read process call with PEC
   - `S B4 A 30 A 01 A <TARGET_CMD> A <PEC> A Sr B5 A 05 A <M_L> A <M_H> A <B_L> A <B_H> A <R> A <PEC> N P`
 - `ARA 0x0C` when ALERT# asserted
+  - Lab-validation policy only unless the final CRPS product contract enables ARA
   - no PEC host read: `S 19 A <ALERTING_WRITE_ADDR> N P`
   - PEC host read: `S 19 A <ALERTING_WRITE_ADDR> A <PEC> N P`
 - `ARP 0x61 GET_UDID`
+  - Lab-validation policy only unless the final CRPS product contract enables SMBus ARP/UDID
   - `S C2 A 03 A Sr C3 A 11 A <17-byte UDID> A <PEC> N P`
 - `Zone Read 0x28`
   - `S 51 A 05 A <ZONE_CONFIG_L> A <ZONE_CONFIG_H> A <ZONE_ACTIVE_L> A <ZONE_ACTIVE_H> A <STATUS_BYTE> A <PEC> N P`
@@ -445,6 +612,7 @@ When validating this slave with the Pico PMBus master tool, the intended host-si
   - `CONTROL` assert/deassert
   - `ALERT#` poll / optional ARA helper
   - ARA response compatibility:
+    - validate only when `PMBUS_ENABLE_ARA_ALIAS = 1`
     - no-PEC host read expects one byte: alerting slave write address
     - PEC host read expects two bytes: alerting slave write address + SMBus PEC over `ARA read address + response address`
     - first ARA byte must be valid immediately at `SLA+R ACK`; reading a stale previous TX byte is a failure
@@ -453,6 +621,7 @@ When validating this slave with the Pico PMBus master tool, the intended host-si
     - after master NACK/STOP, alias must release and normal slave address must respond again
   - ARP alias:
     - `0x61` should ACK when `PMBUS_ENABLE_ARP = 1`
+    - `0x61` should not be treated as a required CRPS-default response when `PMBUS_ENABLE_ARP = 0`
     - `GET_UDID` returns count `0x11` plus 17 UDID bytes
     - `ASSIGN_ADDRESS` updates the normal PMBus slave address and reconfigures aliases
   - Zone alias:
@@ -465,4 +634,5 @@ Checklist interpretation:
 - `Receive Byte`, generic `Block Write`, end-to-end `ALERT# -> ARA`, and bus-timing review may still remain manual depending on the target test setup.
 - `Block Write-Read Process Call` coverage now includes explicit `QUERY (0x1A)` and `SMBALERT_MASK (0x1B)` validation for this slave.
 - `QUERY (0x1A)` and `SMBALERT_MASK (0x1B)` are now explicit validation targets for this slave.
+- Pico `Full` also auto-checks `ALERT#` polling and `CONTROL` GPIO assert/deassert/readback helpers; this validates the reference side-band path, not final CRPS product policy.
 - `Group Command` should be interpreted as verified transport sequencing unless a dedicated application-level simultaneous-commit check is added for the command under test.

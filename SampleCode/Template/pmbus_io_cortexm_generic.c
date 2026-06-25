@@ -106,6 +106,18 @@ void pmbus_io_i2c_interrupt(unsigned char enable_state)
     }
 }
 
+void pmbus_io_i2c_irq_guard(unsigned char enable_state)
+{
+    if (enable_state == Enable)
+    {
+        NVIC_EnableIRQ(PMBUS_PORT_I2C_IRQn);
+    }
+    else
+    {
+        NVIC_DisableIRQ(PMBUS_PORT_I2C_IRQn);
+    }
+}
+
 void pmbus_io_i2c_timeout(unsigned char enable_state)
 {
     if (enable_state == Enable)

@@ -65,6 +65,11 @@ typedef struct
     uint16_t zone_active;
 #endif
     uint16_t vout_command;
+    uint8_t vout_command_format;
+    uint8_t vout_command_parameter;
+    uint8_t vout_command_relative;
+    uint8_t vout_command_valid;
+    uint32_t vout_command_mv;
     uint16_t vout_trim;
     uint16_t vout_cal_offset;
     uint16_t vout_max;
@@ -75,7 +80,7 @@ typedef struct
     uint16_t vout_scale_loop;
     uint16_t vout_scale_monitor;
     uint16_t vout_min;
-#if PMBUS_ENABLE_CMD_PAGE_PLUS
+#if PMBUS_ENABLE_CMD_COEFFICIENTS
     uint8_t coefficients[5];
 #endif
     uint16_t pout_max;
@@ -131,6 +136,30 @@ typedef struct
 #if PMBUS_ENABLE_CMD_MFR_EXT
     uint8_t blackbox_latched;
     uint8_t mfr_cold_redundancy_config;
+    uint8_t mfr_efficiency_data[PMBUS_MFR_EFFICIENCY_DATA_BLOCK_SIZE];
+    uint8_t mfr_read_config_file_size[PMBUS_MFR_CONFIG_FILE_SIZE_BLOCK_SIZE];
+    uint16_t mfr_read_config_block_size;
+    uint8_t mfr_read_config_file[PMBUS_MFR_READ_CONFIG_FILE_BLOCK_SIZE];
+    uint16_t mfr_hw_compatibility;
+    uint8_t mfr_fwupload_capability;
+    uint8_t mfr_fru_protection;
+    uint8_t mfr_spdm[PMBUS_MFR_SPDM_BLOCK_SIZE];
+    uint16_t mfr_pwok_warning_time;
+    uint8_t mfr_real_time_black_box[PMBUS_MFR_REAL_TIME_BLACK_BOX_SIZE];
+    uint8_t mfr_system_black_box[PMBUS_MFR_SYSTEM_BLACK_BOX_SIZE];
+    uint8_t mfr_black_box_config;
+    uint8_t mfr_line_status;
+    uint16_t mfr_system_led_cntl;
+    uint16_t mfr_fwupload_block_size;
+    uint8_t mfr_en_status_simulation_cmd;
+    uint8_t mfr_peak_current_record[PMBUS_MFR_PEAK_CURRENT_RECORD_SIZE];
+    uint8_t mfr_component_id[PMBUS_MFR_COMPONENT_ID_SIZE];
+    uint16_t mfr_tot_pout_max;
+    uint16_t mfr_vout_margining;
+    uint8_t mfr_ocwpl1_setting[PMBUS_MFR_OCWPL1_SETTING_SIZE];
+    uint8_t mfr_max_iout_capability[PMBUS_MFR_MAX_IOUT_CAPABILITY_SIZE];
+    uint16_t mfr_fpc_main_min_off_time;
+    uint16_t mfr_fpc_12vsb_min_off_time;
 #endif
 #if PMBUS_ENABLE_CMD_FWUPLOAD
     uint8_t mfr_fwupload_mode;
@@ -195,8 +224,43 @@ static uint8_t g_mfr_id[] = "MFR_ID_001";
 static uint8_t g_mfr_model[] = "MFR_MODEL_001";
 static uint8_t g_mfr_revision[] = "MFR_REV_001";
 static uint8_t g_mfr_serial[] = "MFR_SERIAL_001";
+#if PMBUS_ENABLE_CMD_MFR_EXT
+/* Fixed M-CRPS profile placeholders.
+   TODO: Replace with SKU, bootloader, and production metadata. */
+static uint8_t g_mfr_fw_revision[PMBUS_MFR_FW_REVISION_BLOCK_SIZE] = { 'F', 'W', '_', '0', '0', '1', 'A' };
+static uint8_t g_mfr_efficiency_data_default[PMBUS_MFR_EFFICIENCY_DATA_BLOCK_SIZE] =
+{
+    0x32U, 0x39U, 0x36U, 0x38U, 0x34U, 0x39U, 0x32U, 0x30U
+};
+static uint8_t g_mfr_read_config_file_size_default[PMBUS_MFR_CONFIG_FILE_SIZE_BLOCK_SIZE] =
+{
+    PMBUS_MFR_READ_CONFIG_FILE_BLOCK_SIZE, 0x00U, 0x00U, 0x00U
+};
+static uint8_t g_mfr_read_config_file_default[PMBUS_MFR_READ_CONFIG_FILE_BLOCK_SIZE] =
+{
+    'C', 'F', 'G', '_', 'P', 'L', 'A', 'C',
+    'E', 'H', 'O', 'L', 'D', 'E', 'R', '1'
+};
+static uint8_t g_mfr_spdm_default[PMBUS_MFR_SPDM_BLOCK_SIZE] =
+{
+    'S', 'P', 'D', 'M', '_', 'N', 'A', '1'
+};
+static uint8_t g_mfr_peak_current_record_default[PMBUS_MFR_PEAK_CURRENT_RECORD_SIZE] =
+{
+    0x01U, 0x00U, 0x00U, 0x00U, 0x02U, 0x00U, 0x00U, 0x00U
+};
+static uint8_t g_mfr_component_id_default[PMBUS_MFR_COMPONENT_ID_SIZE] =
+{
+    'M', '0', '3', '2', '_', 'C', 'R', 'P', 'S', '_', '0', '1'
+};
+static uint8_t g_mfr_ocwpl1_setting_default[PMBUS_MFR_OCWPL1_SETTING_SIZE] =
+{
+    0x01U, 0x00U, 0x00U, 0x00U, 0x02U, 0x00U, 0x00U, 0x00U
+};
+#endif
 
 static void pmbus_app_copy_bytes(uint8_t *dst, uint8_t *src, uint8_t length);
+static void pmbus_app_copy_bounded(uint8_t *dst, uint8_t dst_size, uint8_t *src, uint8_t length);
 #if PMBUS_ENABLE_CMD_ENERGY
 static uint16_t pmbus_app_compute_energy_step(uint32_t power_mw);
 #endif
@@ -216,6 +280,28 @@ static void pmbus_app_copy_bytes(uint8_t *dst, uint8_t *src, uint8_t length)
     for (index = 0U; index < length; index++)
     {
         dst[index] = src[index];
+    }
+}
+
+static void pmbus_app_copy_bounded(uint8_t *dst, uint8_t dst_size, uint8_t *src, uint8_t length)
+{
+    uint8_t index;
+    uint8_t copy_length;
+
+    copy_length = length;
+    if (copy_length > dst_size)
+    {
+        copy_length = dst_size;
+    }
+
+    for (index = 0U; index < copy_length; index++)
+    {
+        dst[index] = src[index];
+    }
+
+    for (index = copy_length; index < dst_size; index++)
+    {
+        dst[index] = 0x00U;
     }
 }
 
@@ -491,7 +577,7 @@ static signed char pmbus_app_decode_vout_exponent(uint8_t vout_mode)
 {
     uint8_t raw_exponent;
 
-    raw_exponent = (uint8_t)(vout_mode & 0x1FU);
+    raw_exponent = (uint8_t)(vout_mode & PMBUS_VOUT_MODE_PARAMETER_MASK);
     if ((raw_exponent & 0x10U) != 0U)
     {
         return (signed char)(raw_exponent | 0xE0U);
@@ -500,7 +586,71 @@ static signed char pmbus_app_decode_vout_exponent(uint8_t vout_mode)
     return (signed char)raw_exponent;
 }
 
-static uint16_t pmbus_app_encode_ulinear16_from_mv(uint16_t millivolts, signed char exponent)
+static uint8_t pmbus_app_get_vout_mode_format(uint8_t vout_mode)
+{
+    return (uint8_t)(vout_mode & PMBUS_VOUT_MODE_FORMAT_MASK);
+}
+
+static uint8_t pmbus_app_is_vout_vid_selector_valid(uint8_t selector)
+{
+    /*
+        PMBus 1.3.1 Table 3 only defines manufacturer-specific VID code
+        selectors 1Eh/1Fh as currently usable generic hooks. Other listed
+        values are Not Used or reserved for future CPU vendor definitions.
+    */
+    if ((selector == 0x1EU) || (selector == 0x1FU))
+    {
+        return 1U;
+    }
+
+    return 0U;
+}
+
+static uint8_t pmbus_app_is_vout_mode_valid(uint8_t vout_mode)
+{
+    uint8_t format;
+    uint8_t parameter;
+
+    format = pmbus_app_get_vout_mode_format(vout_mode);
+    parameter = (uint8_t)(vout_mode & PMBUS_VOUT_MODE_PARAMETER_MASK);
+
+    if (format == PMBUS_VOUT_MODE_FORMAT_VID)
+    {
+        if ((vout_mode & PMBUS_VOUT_MODE_RELATIVE_MASK) != 0U)
+        {
+            return 0U;
+        }
+        return pmbus_app_is_vout_vid_selector_valid(parameter);
+    }
+
+    if ((format == PMBUS_VOUT_MODE_FORMAT_DIRECT) ||
+        (format == PMBUS_VOUT_MODE_FORMAT_IEEE_HALF))
+    {
+        if (parameter != 0U)
+        {
+            return 0U;
+        }
+    }
+
+    return 1U;
+}
+
+static uint8_t pmbus_app_vout_mode_has_numeric_mv(uint8_t vout_mode)
+{
+    uint8_t format;
+
+    format = pmbus_app_get_vout_mode_format(vout_mode);
+    if ((format == PMBUS_VOUT_MODE_FORMAT_ULINEAR16) ||
+        (format == PMBUS_VOUT_MODE_FORMAT_DIRECT) ||
+        (format == PMBUS_VOUT_MODE_FORMAT_IEEE_HALF))
+    {
+        return 1U;
+    }
+
+    return 0U;
+}
+
+static uint16_t pmbus_app_encode_ulinear16_from_mv(uint32_t millivolts, signed char exponent)
 {
     uint32_t raw_value;
     uint32_t denominator;
@@ -522,6 +672,418 @@ static uint16_t pmbus_app_encode_ulinear16_from_mv(uint16_t millivolts, signed c
     }
 
     return (uint16_t)raw_value;
+}
+
+static long pmbus_app_pow10_signed(signed char exponent)
+{
+    long value;
+    signed char index;
+
+    value = 1L;
+    if (exponent < 0)
+    {
+        exponent = (signed char)(-exponent);
+    }
+
+    for (index = 0; index < exponent; index++)
+    {
+        value *= 10L;
+    }
+
+    return value;
+}
+
+static int16_t pmbus_app_decode_s16(uint16_t raw_value)
+{
+    return (int16_t)raw_value;
+}
+
+static signed char pmbus_app_decode_s8(uint8_t raw_value)
+{
+    return (signed char)raw_value;
+}
+
+static uint8_t pmbus_app_get_direct_coefficients(int16_t *m, int16_t *b, signed char *r)
+{
+#if PMBUS_ENABLE_CMD_COEFFICIENTS
+    if ((m == 0) || (b == 0) || (r == 0))
+    {
+        return 0U;
+    }
+
+    *m = pmbus_app_decode_s16((uint16_t)(((uint16_t)g_pmbus_app.coefficients[1] << 8) |
+        g_pmbus_app.coefficients[0]));
+    *b = pmbus_app_decode_s16((uint16_t)(((uint16_t)g_pmbus_app.coefficients[3] << 8) |
+        g_pmbus_app.coefficients[2]));
+    *r = pmbus_app_decode_s8(g_pmbus_app.coefficients[4]);
+
+    if (*m == 0)
+    {
+        return 0U;
+    }
+
+    return 1U;
+#else
+    m = m;
+    b = b;
+    r = r;
+    return 0U;
+#endif
+}
+
+static uint8_t pmbus_app_decode_direct_to_mv(uint16_t raw_value, uint32_t *decoded_mv)
+{
+    int16_t m;
+    int16_t b;
+    signed char r;
+    long y;
+    long numerator;
+    long denominator;
+    long power10;
+    long value_mv;
+
+    if (decoded_mv != 0)
+    {
+        *decoded_mv = 0UL;
+    }
+
+    if (pmbus_app_get_direct_coefficients(&m, &b, &r) == 0U)
+    {
+        return 0U;
+    }
+
+    y = (long)pmbus_app_decode_s16(raw_value);
+    if (r >= 0)
+    {
+        power10 = pmbus_app_pow10_signed(r);
+        numerator = (y * 1000L) - ((long)b * 1000L * power10);
+        denominator = (long)m * power10;
+    }
+    else
+    {
+        power10 = pmbus_app_pow10_signed(r);
+        numerator = ((y * power10) - (long)b) * 1000L;
+        denominator = (long)m;
+    }
+
+    if (denominator == 0L)
+    {
+        return 0U;
+    }
+
+    value_mv = pmbus_app_div_round_signed(numerator, denominator);
+    if (value_mv < 0L)
+    {
+        return 0U;
+    }
+
+    if (decoded_mv != 0)
+    {
+        *decoded_mv = (uint32_t)value_mv;
+    }
+
+    return 1U;
+}
+
+static uint8_t pmbus_app_decode_ieee_half_to_mv(uint16_t raw_value, uint32_t *decoded_mv)
+{
+    uint8_t sign;
+    uint8_t exponent;
+    uint16_t fraction;
+    uint32_t mantissa;
+    uint32_t value_mv;
+    signed char shift;
+
+    if (decoded_mv != 0)
+    {
+        *decoded_mv = 0UL;
+    }
+
+    sign = (uint8_t)((raw_value & 0x8000U) != 0U);
+    exponent = (uint8_t)((raw_value >> 10) & 0x1FU);
+    fraction = (uint16_t)(raw_value & 0x03FFU);
+
+    if (exponent == 0x1FU)
+    {
+        if (fraction == 0U)
+        {
+            if (sign != 0U)
+            {
+                return 0U;
+            }
+            if (decoded_mv != 0)
+            {
+                *decoded_mv = 0xFFFFFFFFUL;
+            }
+            return 1U;
+        }
+
+        return 0U;
+    }
+
+    if (sign != 0U)
+    {
+        /* This CRPS reference is a positive-output PSU. */
+        return 0U;
+    }
+
+    if (exponent == 0U)
+    {
+        mantissa = (uint32_t)fraction;
+        shift = -24;
+    }
+    else
+    {
+        mantissa = 1024UL + (uint32_t)fraction;
+        shift = (signed char)((signed char)exponent - 25);
+    }
+
+    value_mv = mantissa * 1000UL;
+    if (shift >= 0)
+    {
+        value_mv <<= shift;
+    }
+    else
+    {
+        value_mv = (value_mv + (1UL << ((-shift) - 1))) >> (-shift);
+    }
+
+    if (decoded_mv != 0)
+    {
+        *decoded_mv = value_mv;
+    }
+
+    return 1U;
+}
+
+static uint8_t pmbus_app_encode_direct_from_mv(uint32_t millivolts, uint16_t *raw_value)
+{
+    int16_t m;
+    int16_t b;
+    signed char r;
+    long numerator;
+    long denominator;
+    long power10;
+    long y;
+
+    if (raw_value == 0)
+    {
+        return 0U;
+    }
+
+    if (pmbus_app_get_direct_coefficients(&m, &b, &r) == 0U)
+    {
+        return 0U;
+    }
+
+    numerator = ((long)m * (long)millivolts) + ((long)b * 1000L);
+    if (r >= 0)
+    {
+        power10 = pmbus_app_pow10_signed(r);
+        numerator *= power10;
+        denominator = 1000L;
+    }
+    else
+    {
+        power10 = pmbus_app_pow10_signed(r);
+        denominator = 1000L * power10;
+    }
+
+    if (denominator == 0L)
+    {
+        return 0U;
+    }
+
+    y = pmbus_app_div_round_signed(numerator, denominator);
+    if (y > 32767L)
+    {
+        y = 32767L;
+    }
+    else if (y < -32768L)
+    {
+        y = -32768L;
+    }
+
+    *raw_value = (uint16_t)((int16_t)y);
+    return 1U;
+}
+
+static uint8_t pmbus_app_encode_ieee_half_from_mv(uint32_t millivolts, uint16_t *raw_value)
+{
+    long exponent;
+    uint32_t base_mv;
+    uint32_t fraction;
+
+    if (raw_value == 0)
+    {
+        return 0U;
+    }
+
+    if (millivolts == 0UL)
+    {
+        *raw_value = 0U;
+        return 1U;
+    }
+
+    if (millivolts > 65504000UL)
+    {
+        *raw_value = 0x7C00U;
+        return 1U;
+    }
+
+    exponent = 0L;
+    base_mv = 1000UL;
+    while ((exponent < 15L) && (millivolts >= (base_mv << 1)))
+    {
+        base_mv <<= 1;
+        exponent++;
+    }
+
+    while ((exponent > -14L) && (millivolts < base_mv))
+    {
+        base_mv = (base_mv + 1UL) >> 1;
+        exponent--;
+    }
+
+    if (base_mv == 0UL)
+    {
+        *raw_value = 0U;
+        return 1U;
+    }
+
+    if (millivolts < base_mv)
+    {
+        *raw_value = 0U;
+        return 1U;
+    }
+
+    fraction = (((millivolts - base_mv) * 1024UL) + (base_mv / 2UL)) / base_mv;
+    if (fraction >= 1024UL)
+    {
+        fraction = 0UL;
+        exponent++;
+    }
+
+    if (exponent > 15L)
+    {
+        *raw_value = 0x7C00U;
+        return 1U;
+    }
+
+    *raw_value = (uint16_t)(((uint16_t)(exponent + 15L) << 10) | (uint16_t)fraction);
+    return 1U;
+}
+
+static uint8_t pmbus_app_encode_vout_from_mv(uint32_t millivolts, uint8_t vout_mode, uint16_t *raw_value)
+{
+    uint8_t format;
+    signed char exponent;
+
+    if (raw_value == 0)
+    {
+        return 0U;
+    }
+
+    if (pmbus_app_is_vout_mode_valid(vout_mode) == 0U)
+    {
+        return 0U;
+    }
+
+    format = pmbus_app_get_vout_mode_format(vout_mode);
+    switch (format)
+    {
+        case PMBUS_VOUT_MODE_FORMAT_ULINEAR16:
+            exponent = pmbus_app_decode_vout_exponent(vout_mode);
+            *raw_value = pmbus_app_encode_ulinear16_from_mv(millivolts, exponent);
+            return 1U;
+
+        case PMBUS_VOUT_MODE_FORMAT_DIRECT:
+            return pmbus_app_encode_direct_from_mv(millivolts, raw_value);
+
+        case PMBUS_VOUT_MODE_FORMAT_IEEE_HALF:
+            return pmbus_app_encode_ieee_half_from_mv(millivolts, raw_value);
+
+        default:
+            break;
+    }
+
+    return 0U;
+}
+
+static uint8_t pmbus_app_parse_vout_word(uint16_t value, uint8_t vout_mode, uint32_t *decoded_mv)
+{
+    uint8_t format;
+    signed char exponent;
+
+    if (decoded_mv != 0)
+    {
+        *decoded_mv = 0UL;
+    }
+
+    if (pmbus_app_is_vout_mode_valid(vout_mode) == 0U)
+    {
+        return 0U;
+    }
+
+    format = pmbus_app_get_vout_mode_format(vout_mode);
+
+    switch (format)
+    {
+        case PMBUS_VOUT_MODE_FORMAT_ULINEAR16:
+            exponent = pmbus_app_decode_vout_exponent(vout_mode);
+            if (decoded_mv != 0)
+            {
+                *decoded_mv = pmbus_app_decode_ulinear16_to_mv(value, exponent);
+            }
+            return 1U;
+
+        case PMBUS_VOUT_MODE_FORMAT_VID:
+            /*
+                VID code packing is protocol-defined and right-justified. The
+                voltage table for selector 1Eh/1Fh is manufacturer-specific, so
+                the raw VID code remains the portable shadow.
+            */
+            return 1U;
+
+        case PMBUS_VOUT_MODE_FORMAT_DIRECT:
+            return pmbus_app_decode_direct_to_mv(value, decoded_mv);
+
+        case PMBUS_VOUT_MODE_FORMAT_IEEE_HALF:
+            return pmbus_app_decode_ieee_half_to_mv(value, decoded_mv);
+
+        default:
+            break;
+    }
+
+    return 0U;
+}
+
+static uint8_t pmbus_app_apply_vout_command_format(uint16_t value, uint8_t vout_mode)
+{
+    uint32_t decoded_mv;
+
+    decoded_mv = 0UL;
+    if (pmbus_app_parse_vout_word(value, vout_mode, &decoded_mv) == 0U)
+    {
+        g_pmbus_app.vout_command_valid = 0U;
+        return 0U;
+    }
+
+    g_pmbus_app.vout_command = value;
+    g_pmbus_app.vout_command_format = pmbus_app_get_vout_mode_format(vout_mode);
+    g_pmbus_app.vout_command_parameter = (uint8_t)(vout_mode & PMBUS_VOUT_MODE_PARAMETER_MASK);
+    g_pmbus_app.vout_command_relative = (uint8_t)((vout_mode & PMBUS_VOUT_MODE_RELATIVE_MASK) != 0U);
+    g_pmbus_app.vout_command_valid = 1U;
+    g_pmbus_app.vout_command_mv = decoded_mv;
+
+    if ((g_pmbus_app.vout_command_format == PMBUS_VOUT_MODE_FORMAT_ULINEAR16) ||
+        (g_pmbus_app.vout_command_format == PMBUS_VOUT_MODE_FORMAT_DIRECT) ||
+        (g_pmbus_app.vout_command_format == PMBUS_VOUT_MODE_FORMAT_IEEE_HALF))
+    {
+        g_pmbus_app.source_vout_mv = decoded_mv;
+    }
+
+    return 1U;
 }
 
 static void pmbus_app_refresh_status_word(void)
@@ -763,7 +1325,7 @@ static void pmbus_app_refresh_status_and_optional_latch(uint8_t latch_on_fault)
 
 static void pmbus_app_refresh_shadow_data(void)
 {
-    signed char vout_exponent;
+    uint8_t vout_mode_numeric_mv;
 #if PMBUS_ENABLE_CMD_ENERGY
     uint16_t ein_sample_step;
     uint16_t eout_sample_step;
@@ -778,6 +1340,7 @@ static void pmbus_app_refresh_shadow_data(void)
     uint32_t vout_ov_warn_limit_mv;
     uint32_t vout_uv_warn_limit_mv;
     uint32_t vout_uv_fault_limit_mv;
+    uint8_t vout_limit_numeric_valid;
     long vin_ov_fault_limit_mv;
     long vin_ov_warn_limit_mv;
     long vin_uv_warn_limit_mv;
@@ -795,11 +1358,17 @@ static void pmbus_app_refresh_shadow_data(void)
     long fan_command_2_rpm;
 #endif
 
-    vout_exponent = pmbus_app_decode_vout_exponent(g_pmbus_app.vout_mode);
+    vout_mode_numeric_mv = pmbus_app_vout_mode_has_numeric_mv(g_pmbus_app.vout_mode);
 
     g_pmbus_app.read_vin = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_vin_mv, 1000U);
     g_pmbus_app.read_iin = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_iin_ma, 1000U);
-    g_pmbus_app.read_vout = pmbus_app_encode_ulinear16_from_mv((uint16_t)g_pmbus_app.source_vout_mv, vout_exponent);
+    if (pmbus_app_encode_vout_from_mv(g_pmbus_app.source_vout_mv,
+        g_pmbus_app.vout_mode,
+        &g_pmbus_app.read_vout) == 0U)
+    {
+        /* VID needs a product VID table, so READ_VOUT mirrors the command raw code. */
+        g_pmbus_app.read_vout = g_pmbus_app.vout_command;
+    }
     g_pmbus_app.read_iout = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_iout_ma, 1000U);
     g_pmbus_app.read_temperature_1 = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_temp1_mc, 1000U);
     g_pmbus_app.read_temperature_2 = pmbus_app_encode_linear11_scaled((long)g_pmbus_app.source_temp2_mc, 1000U);
@@ -823,10 +1392,32 @@ static void pmbus_app_refresh_shadow_data(void)
 #endif
 
 #if PMBUS_ENABLE_CMD_LIMITS
-    vout_ov_fault_limit_mv = pmbus_app_decode_ulinear16_to_mv(g_pmbus_app.vout_ov_fault_limit, vout_exponent);
-    vout_ov_warn_limit_mv = pmbus_app_decode_ulinear16_to_mv(g_pmbus_app.vout_ov_warn_limit, vout_exponent);
-    vout_uv_warn_limit_mv = pmbus_app_decode_ulinear16_to_mv(g_pmbus_app.vout_uv_warn_limit, vout_exponent);
-    vout_uv_fault_limit_mv = pmbus_app_decode_ulinear16_to_mv(g_pmbus_app.vout_uv_fault_limit, vout_exponent);
+    vout_limit_numeric_valid = 0U;
+    if (vout_mode_numeric_mv != 0U)
+    {
+        if ((pmbus_app_parse_vout_word(g_pmbus_app.vout_ov_fault_limit,
+                g_pmbus_app.vout_mode,
+                &vout_ov_fault_limit_mv) != 0U) &&
+            (pmbus_app_parse_vout_word(g_pmbus_app.vout_ov_warn_limit,
+                g_pmbus_app.vout_mode,
+                &vout_ov_warn_limit_mv) != 0U) &&
+            (pmbus_app_parse_vout_word(g_pmbus_app.vout_uv_warn_limit,
+                g_pmbus_app.vout_mode,
+                &vout_uv_warn_limit_mv) != 0U) &&
+            (pmbus_app_parse_vout_word(g_pmbus_app.vout_uv_fault_limit,
+                g_pmbus_app.vout_mode,
+                &vout_uv_fault_limit_mv) != 0U))
+        {
+            vout_limit_numeric_valid = 1U;
+        }
+    }
+    if (vout_limit_numeric_valid == 0U)
+    {
+        vout_ov_fault_limit_mv = 0UL;
+        vout_ov_warn_limit_mv = 0UL;
+        vout_uv_warn_limit_mv = 0UL;
+        vout_uv_fault_limit_mv = 0UL;
+    }
     vin_ov_fault_limit_mv = pmbus_app_decode_linear11_scaled(g_pmbus_app.vin_ov_fault_limit, 1000U);
     vin_ov_warn_limit_mv = pmbus_app_decode_linear11_scaled(g_pmbus_app.vin_ov_warn_limit, 1000U);
     vin_uv_warn_limit_mv = pmbus_app_decode_linear11_scaled(g_pmbus_app.vin_uv_warn_limit, 1000U);
@@ -838,22 +1429,25 @@ static void pmbus_app_refresh_shadow_data(void)
     ot_fault_limit_mc = pmbus_app_decode_linear11_scaled(g_pmbus_app.ot_fault_limit, 1000U);
     ot_warn_limit_mc = pmbus_app_decode_linear11_scaled(g_pmbus_app.ot_warn_limit, 1000U);
 
-    if (g_pmbus_app.source_vout_mv >= vout_ov_fault_limit_mv)
+    if (vout_limit_numeric_valid != 0U)
     {
-        effective_vout_source = (uint8_t)(effective_vout_source | PMBUS_STATUS_VOUT_VOUT_OV_FAULT);
-    }
-    else if (g_pmbus_app.source_vout_mv >= vout_ov_warn_limit_mv)
-    {
-        effective_vout_source = (uint8_t)(effective_vout_source | PMBUS_STATUS_VOUT_VOUT_OV_WARNING);
-    }
+        if (g_pmbus_app.source_vout_mv >= vout_ov_fault_limit_mv)
+        {
+            effective_vout_source = (uint8_t)(effective_vout_source | PMBUS_STATUS_VOUT_VOUT_OV_FAULT);
+        }
+        else if (g_pmbus_app.source_vout_mv >= vout_ov_warn_limit_mv)
+        {
+            effective_vout_source = (uint8_t)(effective_vout_source | PMBUS_STATUS_VOUT_VOUT_OV_WARNING);
+        }
 
-    if (g_pmbus_app.source_vout_mv <= vout_uv_fault_limit_mv)
-    {
-        effective_vout_source = (uint8_t)(effective_vout_source | PMBUS_STATUS_VOUT_VOUT_UV_FAULT);
-    }
-    else if (g_pmbus_app.source_vout_mv <= vout_uv_warn_limit_mv)
-    {
-        effective_vout_source = (uint8_t)(effective_vout_source | PMBUS_STATUS_VOUT_VOUT_UV_WARNING);
+        if (g_pmbus_app.source_vout_mv <= vout_uv_fault_limit_mv)
+        {
+            effective_vout_source = (uint8_t)(effective_vout_source | PMBUS_STATUS_VOUT_VOUT_UV_FAULT);
+        }
+        else if (g_pmbus_app.source_vout_mv <= vout_uv_warn_limit_mv)
+        {
+            effective_vout_source = (uint8_t)(effective_vout_source | PMBUS_STATUS_VOUT_VOUT_UV_WARNING);
+        }
     }
 
     if ((long)g_pmbus_app.source_iout_ma >= iout_oc_fault_limit_ma)
@@ -983,6 +1577,27 @@ static void pmbus_app_refresh_shadow_data(void)
     pmbus_app_refresh_status_and_optional_latch(0U);
 }
 
+static uint8_t pmbus_app_store_vout_mode_word(uint16_t *target, uint16_t value)
+{
+    uint32_t decoded_mv;
+
+    decoded_mv = 0UL;
+    /*
+        Validate all VOUT_MODE-qualified voltage words at the PMBus protocol
+        layer. Direct and IEEE-half are numerically parsed here. VID selector
+        1Eh/1Fh is accepted as a product VID-table hook because PMBus does not
+        define a universal VID-to-voltage table.
+    */
+    if (pmbus_app_parse_vout_word(value, g_pmbus_app.vout_mode, &decoded_mv) == 0U)
+    {
+        return 0U;
+    }
+
+    *target = value;
+    pmbus_app_refresh_shadow_data();
+    return 1U;
+}
+
 void pmbus_app_init(void)
 {
     g_pmbus_app.slave_address_7bit = pmbus_app_detect_slave_address_7bit();
@@ -1082,12 +1697,15 @@ void pmbus_app_init(void)
        POUT_OP_FAULT_LIMIT, POUT_OP_WARN_LIMIT, PIN_OP_WARN_LIMIT.
        TODO: Replace these portable values with real CRPS control-loop,
        telemetry, calibration, sequencer, and DIRECT-format coefficient data. */
-#if PMBUS_ENABLE_CMD_PAGE_PLUS
+#if PMBUS_ENABLE_CMD_COEFFICIENTS
+    /* Default DIRECT coefficients: X=(Y*10^-R-b)/m, so m=1,b=0,R=3
+       makes the raw word use millivolts for voltage commands. TODO: Replace
+       with command-specific product coefficients if Direct mode is selected. */
     g_pmbus_app.coefficients[0] = 0x01U;
     g_pmbus_app.coefficients[1] = 0x00U;
     g_pmbus_app.coefficients[2] = 0x00U;
     g_pmbus_app.coefficients[3] = 0x00U;
-    g_pmbus_app.coefficients[4] = 0x00U;
+    g_pmbus_app.coefficients[4] = 0x03U;
 #endif
 #if PMBUS_ENABLE_CMD_LIMITS
     g_pmbus_app.pout_max = pmbus_app_encode_linear11_scaled(300000L, 1000U);
@@ -1149,6 +1767,97 @@ void pmbus_app_init(void)
     /* Vendor command defaults are portable test shadows.
        TODO: Replace with production cold-redundancy and firmware-upload policy. */
     g_pmbus_app.mfr_cold_redundancy_config = 0x00U;
+    /* M-CRPS profile placeholders.
+       TODO: Bind these to real efficiency curves, config file storage,
+       SPDM endpoint, hardware compatibility, FRU protection, line status,
+       LED control, FW upload policy, blackbox storage, peak records,
+       component identity, total power, margin policy, OCW settings,
+       FPC timing, and output-current capability data. */
+    pmbus_app_copy_bytes(g_pmbus_app.mfr_efficiency_data,
+        g_mfr_efficiency_data_default,
+        PMBUS_MFR_EFFICIENCY_DATA_BLOCK_SIZE);
+    pmbus_app_copy_bytes(g_pmbus_app.mfr_read_config_file_size,
+        g_mfr_read_config_file_size_default,
+        PMBUS_MFR_CONFIG_FILE_SIZE_BLOCK_SIZE);
+    g_pmbus_app.mfr_read_config_block_size = PMBUS_MFR_READ_CONFIG_FILE_BLOCK_SIZE;
+    pmbus_app_copy_bytes(g_pmbus_app.mfr_read_config_file,
+        g_mfr_read_config_file_default,
+        PMBUS_MFR_READ_CONFIG_FILE_BLOCK_SIZE);
+    g_pmbus_app.mfr_hw_compatibility = 0x0001U;
+    g_pmbus_app.mfr_fwupload_capability = 0x01U;
+    g_pmbus_app.mfr_fru_protection = 0x00U;
+    pmbus_app_copy_bytes(g_pmbus_app.mfr_spdm,
+        g_mfr_spdm_default,
+        PMBUS_MFR_SPDM_BLOCK_SIZE);
+    g_pmbus_app.mfr_black_box_config = 0x00U;
+    g_pmbus_app.mfr_line_status = 0x00U;
+    g_pmbus_app.mfr_system_led_cntl = 0x0000U;
+    g_pmbus_app.mfr_fwupload_block_size = PMBUS_MAX_BLOCK_SIZE;
+    g_pmbus_app.mfr_en_status_simulation_cmd = 0x00U;
+    pmbus_app_copy_bytes(g_pmbus_app.mfr_peak_current_record,
+        g_mfr_peak_current_record_default,
+        PMBUS_MFR_PEAK_CURRENT_RECORD_SIZE);
+    pmbus_app_copy_bytes(g_pmbus_app.mfr_component_id,
+        g_mfr_component_id_default,
+        PMBUS_MFR_COMPONENT_ID_SIZE);
+    g_pmbus_app.mfr_tot_pout_max = pmbus_app_encode_linear11_scaled(320000L, 1000U);
+    g_pmbus_app.mfr_vout_margining = g_pmbus_app.vout_command;
+    pmbus_app_copy_bytes(g_pmbus_app.mfr_ocwpl1_setting,
+        g_mfr_ocwpl1_setting_default,
+        PMBUS_MFR_OCWPL1_SETTING_SIZE);
+    g_pmbus_app.mfr_pwok_warning_time = pmbus_app_encode_linear11_scaled(100L, 1U);
+    g_pmbus_app.mfr_fpc_main_min_off_time = pmbus_app_encode_linear11_scaled(500L, 1U);
+    g_pmbus_app.mfr_fpc_12vsb_min_off_time = pmbus_app_encode_linear11_scaled(500L, 1U);
+    g_pmbus_app.mfr_real_time_black_box[0] = 0x52U;
+    g_pmbus_app.mfr_real_time_black_box[1] = 0x54U;
+    g_pmbus_app.mfr_real_time_black_box[2] = 0x42U;
+    g_pmbus_app.mfr_real_time_black_box[3] = 0x01U;
+    g_pmbus_app.mfr_system_black_box[0] = 0x53U;
+    g_pmbus_app.mfr_system_black_box[1] = 0x59U;
+    g_pmbus_app.mfr_system_black_box[2] = 0x53U;
+    g_pmbus_app.mfr_system_black_box[3] = 0x01U;
+    g_pmbus_app.mfr_system_black_box[4] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[5] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[6] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[7] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[8] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[9] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[10] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[11] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[12] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[13] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[14] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[15] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[16] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[17] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[18] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[19] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[20] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[21] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[22] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[23] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[24] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[25] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[26] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[27] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[28] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[29] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[30] = 0x00U;
+    g_pmbus_app.mfr_system_black_box[31] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[0] = 0x01U;
+    g_pmbus_app.mfr_max_iout_capability[1] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[2] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[3] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[4] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[5] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[6] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[7] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[8] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[9] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[10] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[11] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[12] = 0x00U;
+    g_pmbus_app.mfr_max_iout_capability[13] = 0x00U;
 #endif
 #if PMBUS_ENABLE_CMD_FWUPLOAD
     /* Firmware upload defaults are protocol placeholders only.
@@ -1198,6 +1907,7 @@ void pmbus_app_init(void)
     g_pmbus_app.source_pout_mw = 222000UL;
     g_pmbus_app.source_pin_mw = 276000UL;
 
+    (void)pmbus_app_apply_vout_command_format(g_pmbus_app.vout_command, g_pmbus_app.vout_mode);
     pmbus_app_refresh_shadow_data();
     pmbus_app_set_power_good_state(1U);
 }
@@ -1967,10 +2677,21 @@ uint8_t pmbus_app_get_vout_mode(void)
     return g_pmbus_app.vout_mode;
 }
 
-void pmbus_app_set_vout_mode(uint8_t value)
+uint8_t pmbus_app_set_vout_mode(uint8_t value)
 {
+    if (pmbus_app_is_vout_mode_valid(value) == 0U)
+    {
+        return 0U;
+    }
+
+    if (pmbus_app_apply_vout_command_format(g_pmbus_app.vout_command, value) == 0U)
+    {
+        return 0U;
+    }
+
     g_pmbus_app.vout_mode = value;
     pmbus_app_refresh_shadow_data();
+    return 1U;
 }
 
 uint16_t pmbus_app_get_vout_ov_fault_limit(void)
@@ -1978,10 +2699,9 @@ uint16_t pmbus_app_get_vout_ov_fault_limit(void)
     return g_pmbus_app.vout_ov_fault_limit;
 }
 
-void pmbus_app_set_vout_ov_fault_limit(uint16_t value)
+uint8_t pmbus_app_set_vout_ov_fault_limit(uint16_t value)
 {
-    g_pmbus_app.vout_ov_fault_limit = value;
-    pmbus_app_refresh_shadow_data();
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.vout_ov_fault_limit, value);
 }
 
 uint16_t pmbus_app_get_vout_ov_warn_limit(void)
@@ -1989,10 +2709,9 @@ uint16_t pmbus_app_get_vout_ov_warn_limit(void)
     return g_pmbus_app.vout_ov_warn_limit;
 }
 
-void pmbus_app_set_vout_ov_warn_limit(uint16_t value)
+uint8_t pmbus_app_set_vout_ov_warn_limit(uint16_t value)
 {
-    g_pmbus_app.vout_ov_warn_limit = value;
-    pmbus_app_refresh_shadow_data();
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.vout_ov_warn_limit, value);
 }
 
 uint16_t pmbus_app_get_vout_uv_warn_limit(void)
@@ -2000,10 +2719,9 @@ uint16_t pmbus_app_get_vout_uv_warn_limit(void)
     return g_pmbus_app.vout_uv_warn_limit;
 }
 
-void pmbus_app_set_vout_uv_warn_limit(uint16_t value)
+uint8_t pmbus_app_set_vout_uv_warn_limit(uint16_t value)
 {
-    g_pmbus_app.vout_uv_warn_limit = value;
-    pmbus_app_refresh_shadow_data();
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.vout_uv_warn_limit, value);
 }
 
 uint16_t pmbus_app_get_vout_uv_fault_limit(void)
@@ -2011,10 +2729,9 @@ uint16_t pmbus_app_get_vout_uv_fault_limit(void)
     return g_pmbus_app.vout_uv_fault_limit;
 }
 
-void pmbus_app_set_vout_uv_fault_limit(uint16_t value)
+uint8_t pmbus_app_set_vout_uv_fault_limit(uint16_t value)
 {
-    g_pmbus_app.vout_uv_fault_limit = value;
-    pmbus_app_refresh_shadow_data();
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.vout_uv_fault_limit, value);
 }
 
 uint16_t pmbus_app_get_iout_oc_fault_limit(void)
@@ -2328,9 +3045,15 @@ uint16_t pmbus_app_get_vout_command(void)
     return g_pmbus_app.vout_command;
 }
 
-void pmbus_app_set_vout_command(uint16_t value)
+uint8_t pmbus_app_set_vout_command(uint16_t value)
 {
-    g_pmbus_app.vout_command = value;
+    if (pmbus_app_apply_vout_command_format(value, g_pmbus_app.vout_mode) == 0U)
+    {
+        return 0U;
+    }
+
+    pmbus_app_refresh_shadow_data();
+    return 1U;
 }
 
 uint16_t pmbus_app_get_vout_trim(void)
@@ -2338,9 +3061,9 @@ uint16_t pmbus_app_get_vout_trim(void)
     return g_pmbus_app.vout_trim;
 }
 
-void pmbus_app_set_vout_trim(uint16_t value)
+uint8_t pmbus_app_set_vout_trim(uint16_t value)
 {
-    g_pmbus_app.vout_trim = value;
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.vout_trim, value);
 }
 
 uint16_t pmbus_app_get_vout_cal_offset(void)
@@ -2348,9 +3071,9 @@ uint16_t pmbus_app_get_vout_cal_offset(void)
     return g_pmbus_app.vout_cal_offset;
 }
 
-void pmbus_app_set_vout_cal_offset(uint16_t value)
+uint8_t pmbus_app_set_vout_cal_offset(uint16_t value)
 {
-    g_pmbus_app.vout_cal_offset = value;
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.vout_cal_offset, value);
 }
 
 uint16_t pmbus_app_get_vout_max(void)
@@ -2358,9 +3081,9 @@ uint16_t pmbus_app_get_vout_max(void)
     return g_pmbus_app.vout_max;
 }
 
-void pmbus_app_set_vout_max(uint16_t value)
+uint8_t pmbus_app_set_vout_max(uint16_t value)
 {
-    g_pmbus_app.vout_max = value;
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.vout_max, value);
 }
 
 uint16_t pmbus_app_get_vout_margin_high(void)
@@ -2368,9 +3091,9 @@ uint16_t pmbus_app_get_vout_margin_high(void)
     return g_pmbus_app.vout_margin_high;
 }
 
-void pmbus_app_set_vout_margin_high(uint16_t value)
+uint8_t pmbus_app_set_vout_margin_high(uint16_t value)
 {
-    g_pmbus_app.vout_margin_high = value;
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.vout_margin_high, value);
 }
 
 uint16_t pmbus_app_get_vout_margin_low(void)
@@ -2378,9 +3101,9 @@ uint16_t pmbus_app_get_vout_margin_low(void)
     return g_pmbus_app.vout_margin_low;
 }
 
-void pmbus_app_set_vout_margin_low(uint16_t value)
+uint8_t pmbus_app_set_vout_margin_low(uint16_t value)
 {
-    g_pmbus_app.vout_margin_low = value;
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.vout_margin_low, value);
 }
 
 uint16_t pmbus_app_get_vout_transition_rate(void)
@@ -2428,17 +3151,17 @@ uint16_t pmbus_app_get_vout_min(void)
     return g_pmbus_app.vout_min;
 }
 
-void pmbus_app_set_vout_min(uint16_t value)
+uint8_t pmbus_app_set_vout_min(uint16_t value)
 {
-    g_pmbus_app.vout_min = value;
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.vout_min, value);
 }
 
 uint8_t pmbus_app_get_coefficients(unsigned char requested_command, uint8_t **data_ptr)
 {
-#if PMBUS_ENABLE_CMD_PAGE_PLUS
-    /* COEFFICIENTS currently returns one fixed DIRECT-format coefficient set
-       for any requested command. TODO: Return command-specific coefficients
-       if the product exposes DIRECT-format telemetry or config commands. */
+#if PMBUS_ENABLE_CMD_COEFFICIENTS
+    /* COEFFICIENTS returns a usable default DIRECT coefficient set
+       m=1,b=0,R=3. This makes VOUT raw words use millivolts. TODO: Return
+       command-specific product coefficients if Direct mode is selected. */
     (void)requested_command;
     *data_ptr = g_pmbus_app.coefficients;
     return 5U;
@@ -2544,9 +3267,9 @@ uint16_t pmbus_app_get_power_good_on(void)
     return g_pmbus_app.power_good_on;
 }
 
-void pmbus_app_set_power_good_on(uint16_t value)
+uint8_t pmbus_app_set_power_good_on(uint16_t value)
 {
-    g_pmbus_app.power_good_on = value;
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.power_good_on, value);
 }
 
 uint16_t pmbus_app_get_power_good_off(void)
@@ -2554,9 +3277,9 @@ uint16_t pmbus_app_get_power_good_off(void)
     return g_pmbus_app.power_good_off;
 }
 
-void pmbus_app_set_power_good_off(uint16_t value)
+uint8_t pmbus_app_set_power_good_off(uint16_t value)
 {
-    g_pmbus_app.power_good_off = value;
+    return pmbus_app_store_vout_mode_word(&g_pmbus_app.power_good_off, value);
 }
 
 uint16_t pmbus_app_get_ton_delay(void)
@@ -2669,6 +3392,228 @@ void pmbus_app_set_mfr_cold_redundancy_config(unsigned char value)
 {
     g_pmbus_app.mfr_cold_redundancy_config = value;
 }
+
+uint8_t pmbus_app_get_mfr_efficiency_data(uint8_t **data_ptr)
+{
+    *data_ptr = g_pmbus_app.mfr_efficiency_data;
+    return PMBUS_MFR_EFFICIENCY_DATA_BLOCK_SIZE;
+}
+
+uint8_t pmbus_app_get_mfr_read_config_file_size(uint8_t **data_ptr)
+{
+    *data_ptr = g_pmbus_app.mfr_read_config_file_size;
+    return PMBUS_MFR_CONFIG_FILE_SIZE_BLOCK_SIZE;
+}
+
+uint16_t pmbus_app_get_mfr_read_config_block_size(void)
+{
+    return g_pmbus_app.mfr_read_config_block_size;
+}
+
+uint8_t pmbus_app_get_mfr_read_config_file(uint8_t **data_ptr)
+{
+    *data_ptr = g_pmbus_app.mfr_read_config_file;
+    return PMBUS_MFR_READ_CONFIG_FILE_BLOCK_SIZE;
+}
+
+uint16_t pmbus_app_get_mfr_hw_compatibility(void)
+{
+    return g_pmbus_app.mfr_hw_compatibility;
+}
+
+uint8_t pmbus_app_get_mfr_fwupload_capability(void)
+{
+    return g_pmbus_app.mfr_fwupload_capability;
+}
+
+uint8_t pmbus_app_get_mfr_fw_revision(uint8_t **data_ptr)
+{
+    *data_ptr = g_mfr_fw_revision;
+    return PMBUS_MFR_FW_REVISION_BLOCK_SIZE;
+}
+
+uint8_t pmbus_app_get_mfr_spdm(uint8_t **data_ptr)
+{
+    *data_ptr = g_pmbus_app.mfr_spdm;
+    return PMBUS_MFR_SPDM_BLOCK_SIZE;
+}
+
+uint8_t pmbus_app_get_mfr_fru_protection(void)
+{
+    return g_pmbus_app.mfr_fru_protection;
+}
+
+void pmbus_app_set_mfr_fru_protection(unsigned char value)
+{
+    g_pmbus_app.mfr_fru_protection = value;
+}
+
+uint8_t pmbus_app_get_mfr_real_time_black_box(uint8_t **data_ptr)
+{
+    *data_ptr = g_pmbus_app.mfr_real_time_black_box;
+    return PMBUS_MFR_REAL_TIME_BLACK_BOX_SIZE;
+}
+
+void pmbus_app_set_mfr_real_time_black_box(unsigned char *data_ptr, unsigned char length)
+{
+    pmbus_app_copy_bounded(g_pmbus_app.mfr_real_time_black_box,
+        PMBUS_MFR_REAL_TIME_BLACK_BOX_SIZE,
+        data_ptr,
+        length);
+}
+
+uint8_t pmbus_app_get_mfr_system_black_box(uint8_t **data_ptr)
+{
+    *data_ptr = g_pmbus_app.mfr_system_black_box;
+    return PMBUS_MFR_SYSTEM_BLACK_BOX_SIZE;
+}
+
+void pmbus_app_set_mfr_system_black_box(unsigned char *data_ptr, unsigned char length)
+{
+    pmbus_app_copy_bounded(g_pmbus_app.mfr_system_black_box,
+        PMBUS_MFR_SYSTEM_BLACK_BOX_SIZE,
+        data_ptr,
+        length);
+}
+
+uint8_t pmbus_app_get_mfr_black_box_config(void)
+{
+    return g_pmbus_app.mfr_black_box_config;
+}
+
+void pmbus_app_set_mfr_black_box_config(unsigned char value)
+{
+    g_pmbus_app.mfr_black_box_config = value;
+}
+
+void pmbus_app_clear_mfr_black_box(unsigned char value)
+{
+    if ((value & 0x01U) != 0U)
+    {
+        g_pmbus_app.blackbox_latched = 0U;
+        pmbus_app_refresh_blackbox_snapshot();
+    }
+}
+
+uint8_t pmbus_app_get_mfr_line_status(void)
+{
+    return g_pmbus_app.mfr_line_status;
+}
+
+void pmbus_app_set_mfr_line_status(unsigned char value)
+{
+    g_pmbus_app.mfr_line_status = value;
+}
+
+uint16_t pmbus_app_get_mfr_system_led_cntl(void)
+{
+    return g_pmbus_app.mfr_system_led_cntl;
+}
+
+void pmbus_app_set_mfr_system_led_cntl(uint16_t value)
+{
+    g_pmbus_app.mfr_system_led_cntl = value;
+}
+
+uint16_t pmbus_app_get_mfr_fwupload_block_size(void)
+{
+    return g_pmbus_app.mfr_fwupload_block_size;
+}
+
+uint8_t pmbus_app_get_mfr_en_status_simulation_cmd(void)
+{
+    return g_pmbus_app.mfr_en_status_simulation_cmd;
+}
+
+void pmbus_app_set_mfr_en_status_simulation_cmd(unsigned char value)
+{
+    g_pmbus_app.mfr_en_status_simulation_cmd = value;
+}
+
+uint8_t pmbus_app_get_mfr_peak_current_record(uint8_t **data_ptr)
+{
+    *data_ptr = g_pmbus_app.mfr_peak_current_record;
+    return PMBUS_MFR_PEAK_CURRENT_RECORD_SIZE;
+}
+
+void pmbus_app_set_mfr_peak_current_record(unsigned char *data_ptr, unsigned char length)
+{
+    pmbus_app_copy_bounded(g_pmbus_app.mfr_peak_current_record,
+        PMBUS_MFR_PEAK_CURRENT_RECORD_SIZE,
+        data_ptr,
+        length);
+}
+
+uint8_t pmbus_app_get_mfr_component_id(uint8_t **data_ptr)
+{
+    *data_ptr = g_pmbus_app.mfr_component_id;
+    return PMBUS_MFR_COMPONENT_ID_SIZE;
+}
+
+uint16_t pmbus_app_get_mfr_tot_pout_max(void)
+{
+    return g_pmbus_app.mfr_tot_pout_max;
+}
+
+uint16_t pmbus_app_get_mfr_vout_margining(void)
+{
+    return g_pmbus_app.mfr_vout_margining;
+}
+
+void pmbus_app_set_mfr_vout_margining(uint16_t value)
+{
+    g_pmbus_app.mfr_vout_margining = value;
+}
+
+uint8_t pmbus_app_get_mfr_ocwpl1_setting(uint8_t **data_ptr)
+{
+    *data_ptr = g_pmbus_app.mfr_ocwpl1_setting;
+    return PMBUS_MFR_OCWPL1_SETTING_SIZE;
+}
+
+void pmbus_app_set_mfr_ocwpl1_setting(unsigned char *data_ptr, unsigned char length)
+{
+    pmbus_app_copy_bounded(g_pmbus_app.mfr_ocwpl1_setting,
+        PMBUS_MFR_OCWPL1_SETTING_SIZE,
+        data_ptr,
+        length);
+}
+
+uint16_t pmbus_app_get_mfr_pwok_warning_time(void)
+{
+    return g_pmbus_app.mfr_pwok_warning_time;
+}
+
+void pmbus_app_set_mfr_pwok_warning_time(uint16_t value)
+{
+    g_pmbus_app.mfr_pwok_warning_time = value;
+}
+
+uint8_t pmbus_app_get_mfr_max_iout_capability(uint8_t **data_ptr)
+{
+    *data_ptr = g_pmbus_app.mfr_max_iout_capability;
+    return PMBUS_MFR_MAX_IOUT_CAPABILITY_SIZE;
+}
+
+uint16_t pmbus_app_get_mfr_fpc_main_min_off_time(void)
+{
+    return g_pmbus_app.mfr_fpc_main_min_off_time;
+}
+
+void pmbus_app_set_mfr_fpc_main_min_off_time(uint16_t value)
+{
+    g_pmbus_app.mfr_fpc_main_min_off_time = value;
+}
+
+uint16_t pmbus_app_get_mfr_fpc_12vsb_min_off_time(void)
+{
+    return g_pmbus_app.mfr_fpc_12vsb_min_off_time;
+}
+
+void pmbus_app_set_mfr_fpc_12vsb_min_off_time(uint16_t value)
+{
+    g_pmbus_app.mfr_fpc_12vsb_min_off_time = value;
+}
 #endif
 
 #if PMBUS_ENABLE_CMD_FWUPLOAD
@@ -2713,6 +3658,11 @@ void pmbus_app_set_mfr_fwupload_mode(unsigned char value)
 uint16_t pmbus_app_get_mfr_fwupload_status(void)
 {
     return g_pmbus_app.mfr_fwupload_status;
+}
+
+void pmbus_app_set_mfr_fwupload_status(uint16_t value)
+{
+    g_pmbus_app.mfr_fwupload_status = value;
 }
 
 uint8_t pmbus_app_store_mfr_fwupload_block(unsigned char *data_ptr, unsigned char length)

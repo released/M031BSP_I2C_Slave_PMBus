@@ -356,7 +356,7 @@
             <ClangAsOpt>1</ClangAsOpt>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define></Define>
+              <Define>Stack_Size=0x00000800</Define>
               <Undefine></Undefine>
               <IncludePath></IncludePath>
             </VariousControls>
@@ -473,6 +473,11 @@
               <FileName>pmbus_drv.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\pmbus\pmbus_drv.c</FilePath>
+            </File>
+            <File>
+              <FileName>pmbus_semantics.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\pmbus\pmbus_semantics.c</FilePath>
             </File>
             <File>
               <FileName>pmbus_io.c</FileName>

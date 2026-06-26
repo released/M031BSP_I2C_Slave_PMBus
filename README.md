@@ -15,6 +15,11 @@ The firmware focuses on a standards-aligned PMBus slave transport path:
 - Runtime debug logs for RX decode and TX payload traceability
 - Host-visible placeholder/shadow values for commands that are not yet connected to real PSU control or telemetry sources
 
+The firmware validates the MCU-side PMBus command execution path: command
+decode, transaction dispatch, PEC, payload generation, status/error behavior,
+and debug traceability. The PMBus/SMBus master host board and validation
+GUI/tool are not prescribed by this workspace and must be selected by the user.
+
 ## Target Hardware
 
 | Item | Value |
@@ -114,11 +119,11 @@ x, X, z, Z -> SYS_ResetChip()
 
 The implementation is intended to align with these documents:
 
-- `docs/PMBus-Specification-Rev-1-3-1-Part-I-20150313.pdf` in the Pico HID Test Tool workspace
-- `docs/PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf` in the Pico HID Test Tool workspace
-- `docs/PMBus-Specification-Rev-1-3-1-Part-III-20150313.pdf` in the Pico HID Test Tool workspace, as AVSBus reference only; AVSBus is not implemented by this M032 PMBus/SMBus sample
-- `docs/M-CRPS_Base_Specification_version_1p06p00_RC1-draft7_042026.pdf` in the Pico HID Test Tool workspace, for the optional CRPS product-profile command overlay
-- `docs/UCD90xxx Sequencer and System Health Controller PMBus Command Reference.pdf` in the Pico HID Test Tool workspace, for the TI UCD90xxx command-name profile namespace
+- `PMBus-Specification-Rev-1-3-1-Part-I-20150313.pdf`
+- `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf`
+- `PMBus-Specification-Rev-1-3-1-Part-III-20150313.pdf`, as AVSBus reference only; AVSBus is not implemented by this M032 PMBus/SMBus sample
+- `M-CRPS_Base_Specification_version_1p06p00_RC1-draft7_042026.pdf`, for the optional CRPS product-profile command overlay
+- `UCD90xxx Sequencer and System Health Controller PMBus Command Reference.pdf`, for the TI UCD90xxx command-name profile namespace
 
 Supported transaction formats include:
 
@@ -149,7 +154,7 @@ Profile policy:
   - TI UCD90xxx example: `0xE3 -> PARM_VALUE`
 - If a profile overlay group such as `PMBUS_ENABLE_CMD_CRPS` is disabled, its code points fall back to the generic Base `MFR_SPECIFIC_*` bounded volatile block shadow unless another compiled descriptor owns that command. They must not remain permanently reserved as unsupported commands.
 - Profile-specific command ownership must follow the selected `PMBUS_COMMAND_PROFILE`. For example, `0xD7` is M-CRPS `MFR_FWUPLOAD` only in the M-CRPS profile; in the TI UCD90xxx profile it is `RUN_TIME_CLOCK` Block. TI overlay protocols such as `0xD0 SEQ_TIMEOUT` Word, `0xD1 VOUT_CAL_MONITOR` Word, `0xDA USER_RAM_00` Byte, and `0xF3 MFR_STATUS` Block must not be blocked by Base/M-CRPS descriptors.
-- `PMBUS_SYSTEM_POLICY` is independent from the command profile. `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` keeps optional lab helpers such as ARA alias and ARP disabled by default, while `PMBUS_SYSTEM_POLICY_LAB_VALIDATION` enables them for Pico validation.
+- `PMBUS_SYSTEM_POLICY` is independent from the command profile. `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` keeps optional lab helpers such as ARA alias and ARP disabled by default, while `PMBUS_SYSTEM_POLICY_LAB_VALIDATION` enables them for lab validation.
 - CRPS placeholder values are intentionally stable for host validation; source comments mark where real PSU telemetry, inventory, blackbox, firmware-upload, LED, timing, and protection policy must be connected later.
 - UCD90xxx command names are available through `PMBUS_COMMAND_PROFILE_TI_UCD90XXX` and follow the [TI UCD90xxx PMBus command reference](https://www.ti.com/lit/ug/slvu352g/slvu352g.pdf), local copy `UCD90xxx Sequencer and System Health Controller PMBus Command Reference.pdf`. Target-specific UCD90xxx device emulation remains product/application policy and should be implemented separately from the common PMBus transport.
 
@@ -162,9 +167,9 @@ SampleCode/Template/PMBUS_VALIDATION_CHECKLIST.md
 
 ## Profile Validation Log Reference
 
-The repository root keeps UART/TeraTerm captures for the currently validated Pico GUI / M031 command profiles. When a command byte is profile-owned, use the log that matches the active `PMBUS_COMMAND_PROFILE`; the same byte can have a different command name, protocol, and payload in another profile.
+The repository root keeps UART/TeraTerm captures for the currently validated M031 command profiles. When a command byte is profile-owned, use the log that matches the active `PMBUS_COMMAND_PROFILE`; the same byte can have a different command name, protocol, and payload in another profile.
 
-| Active Pico GUI profile | M031 `PMBUS_COMMAND_PROFILE` | UART log file | Main command namespace to compare |
+| Active validation profile | M031 `PMBUS_COMMAND_PROFILE` | UART log file | Main command namespace to compare |
 | --- | --- | --- | --- |
 | `PMBus Base` | `PMBUS_COMMAND_PROFILE_BASE` | `teraterm_PROFILE_BASE.log` | PMBus public commands plus generic `USER_DATA_*` and `MFR_SPECIFIC_C0..FD` shadows. |
 | `M-CRPS` | `PMBUS_COMMAND_PROFILE_M_CRPS` | `teraterm_PROFILE_M_CRPS.log` | M-CRPS Table 12-38 profile commands and placeholder/shadow responses. |
@@ -198,25 +203,25 @@ Fixed-value or shadow-backed commands should keep source comments so future firm
 
 ## Typical Validation Setup
 
-Hardware wiring with the Pico HID Test Tool as PMBus master:
+Hardware wiring with a user-provided PMBus/SMBus master host board:
 
-| Pico signal | Pico pin | M031 signal | M031 pin |
+| Host signal | Host pin | M031 signal | M031 pin |
 | --- | --- | --- | --- |
-| PMBus SDA | GP20 | PMBUS_SDA | PB4 default profile |
-| PMBus SCL | GP21 | PMBUS_SCL | PB5 default profile |
-| PMBus ALERT# | GP14 | PMBUS_ALERT# | PB6 |
+| PMBus SDA | User selected | PMBUS_SDA | PB4 default profile |
+| PMBus SCL | User selected | PMBUS_SCL | PB5 default profile |
+| PMBus ALERT# | User selected, optional | PMBUS_ALERT# | PB6 |
 | GND | GND | GND | GND |
 
 Recommended validation flow:
 
 1. Program the M031 firmware.
 2. Open UART0 debug log at 115200 8N1.
-3. Connect Pico HID Test Tool.
-4. Open the PMBus tab.
-5. Select the Pico GUI profile that matches the active `PMBUS_COMMAND_PROFILE` in `pmbus_cfg_user.h`; do not assume the sample is always built as `PMBus Base`.
+3. Connect the user-selected PMBus/SMBus master host board.
+4. Open or run the user-selected PMBus/SMBus validation GUI/tool.
+5. Select the validation profile that matches the active `PMBUS_COMMAND_PROFILE` in `pmbus_cfg_user.h`; do not assume the sample is always built as `PMBus Base`.
 6. Set address to `0x5A`.
 7. Enable PEC.
-8. Enable PMBus master.
+8. Enable the PMBus/SMBus master path in the selected host tool.
 9. Run `Scan`.
 10. Run quick-test groups in order: `Basic`, `PEC`, `Error`, `Telemetry`, `MFR`, `Full`.
 11. Confirm the tool log and MCU UART log match expected command, protocol, PEC, and payload behavior.
@@ -311,13 +316,13 @@ SampleCode/Template/pmbus/pmbus_protocol.h
 
 Profile selection has two separate layers:
 
-- `PMBUS_COMMAND_PROFILE` selects the command-name namespace, profile-specific command ownership, and debug/support display names. This should match the Pico GUI PMBus profile selected during validation.
+- `PMBUS_COMMAND_PROFILE` selects the command-name namespace, profile-specific command ownership, and debug/support display names. This should match the PMBus profile selected in the user-selected validation GUI/tool.
 - `PMBUS_PROFILE` selects the compiled command group size. Keep `PMBUS_PROFILE_FULL` for standards/profile validation unless flash size forces a smaller build.
 - `PMBUS_SYSTEM_POLICY` selects whether optional lab helper behavior is enabled by default. It is independent from the selected command profile.
 
 Recommended validation mapping:
 
-| Pico GUI profile | M032 compile setting | Notes |
+| Validation tool profile | M032 compile setting | Notes |
 | --- | --- | --- |
 | `PMBus Base` | `PMBUS_COMMAND_PROFILE_BASE` | Uses PMBus specification names, including generic `USER_DATA_*` and `MFR_SPECIFIC_*` names. |
 | `M-CRPS` | `PMBUS_COMMAND_PROFILE_M_CRPS` | Uses M-CRPS command names and enables the CRPS command overlay through `PMBUS_ENABLE_CMD_CRPS`. |
@@ -325,14 +330,14 @@ Recommended validation mapping:
 
 Recommended system policy mapping:
 
-| Pico GUI policy | M032 compile setting | Notes |
+| Validation tool policy | M032 compile setting | Notes |
 | --- | --- | --- |
 | `Production` | `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` | Keeps optional SMBus/PMBus lab helpers disabled by default. Use this for product-like validation unless the product contract explicitly enables ARA/ARP behavior. |
-| `Lab validation` | `PMBUS_SYSTEM_POLICY_LAB_VALIDATION` | Enables ARA alias and ARP helper defaults for Pico validation of SMBALERT#/ARA/ARP edge cases. |
+| `Lab validation` | `PMBUS_SYSTEM_POLICY_LAB_VALIDATION` | Enables ARA alias and ARP helper defaults for lab validation of SMBALERT#/ARA/ARP edge cases. |
 
 | Define | Default | Purpose |
 | --- | --- | --- |
-| `PMBUS_COMMAND_PROFILE` | Current sample: `PMBUS_COMMAND_PROFILE_M_CRPS` | Selects the compile-time command profile namespace. Valid values are `PMBUS_COMMAND_PROFILE_BASE`, `PMBUS_COMMAND_PROFILE_M_CRPS`, and `PMBUS_COMMAND_PROFILE_TI_UCD90XXX`. Keep this aligned with the Pico GUI PMBus profile. |
+| `PMBUS_COMMAND_PROFILE` | Current sample: `PMBUS_COMMAND_PROFILE_M_CRPS` | Selects the compile-time command profile namespace. Valid values are `PMBUS_COMMAND_PROFILE_BASE`, `PMBUS_COMMAND_PROFILE_M_CRPS`, and `PMBUS_COMMAND_PROFILE_TI_UCD90XXX`. Keep this aligned with the selected PMBus validation profile. |
 | `PMBUS_COMMAND_PROFILE_BASE` | `1U` | Base PMBus command namespace from the public PMBus command specification. |
 | `PMBUS_COMMAND_PROFILE_M_CRPS` | `2U` | M-CRPS public command namespace and CRPS overlay selection. |
 | `PMBUS_COMMAND_PROFILE_TI_UCD90XXX` | `3U` | TI UCD90xxx command namespace for profile-specific debug/support names. |
@@ -370,7 +375,7 @@ System policy settings:
 | --- | --- | --- |
 | `PMBUS_SYSTEM_POLICY` | `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` | Selects product-like or lab-validation behavior defaults. Valid values are `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` and `PMBUS_SYSTEM_POLICY_LAB_VALIDATION`. |
 | `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` | `1U` | Disables optional lab helper defaults such as ARA alias and ARP unless they are explicitly enabled for a product requirement. |
-| `PMBUS_SYSTEM_POLICY_LAB_VALIDATION` | `2U` | Enables lab helper defaults so Pico validation can exercise SMBALERT#/ARA and ARP paths. |
+| `PMBUS_SYSTEM_POLICY_LAB_VALIDATION` | `2U` | Enables lab helper defaults so validation can exercise SMBALERT#/ARA and ARP paths. |
 | `PMBUS_POLICY_DEFAULT_ARA_ALIAS` | System-policy derived | Derived default for `PMBUS_ENABLE_ARA_ALIAS`: `0U` in Production, `1U` in Lab validation. |
 | `PMBUS_POLICY_DEFAULT_ARP` | System-policy derived | Derived default for `PMBUS_ENABLE_ARP`: `0U` in Production, `PMBUS_PROFILE_DEFAULT_ARP` in Lab validation. |
 
@@ -454,7 +459,7 @@ Buffer and recovery settings:
 
 ## Debug Logging
 
-Debug logging is intentionally human-readable and command-aware. RX debug frames include command byte and command name when known. TX debug logs should print decoded values for telemetry commands so GUI logs can be correlated with MCU-side source values.
+Debug logging is intentionally human-readable and command-aware. RX debug frames include command byte and command name when known. TX debug logs should print decoded values for telemetry commands so host validation logs can be correlated with MCU-side source values.
 
 Do not print from timing-critical ISR paths. Queue or capture data in ISR and print from background processing.
 
@@ -517,23 +522,24 @@ To switch PEC CRC implementation, set `PMBUS_PEC_BACKEND` in `pmbus_cfg_user.h`:
 ```text
 SampleCode/Template/PMBUS_SUPPORT_MATRIX.md
 SampleCode/Template/PMBUS_VALIDATION_CHECKLIST.md
-Pico HID Test Tool repository: docs/PMBUS_TABLE31_GAP_MATRIX.md
+Host-side validation matrix, if available: docs/PMBUS_TABLE31_GAP_MATRIX.md
 ```
 
 ## Revision History
 
 | Date | Change |
 | --- | --- |
+| 2026/06/26 | Removed host-board-specific and validation-tool-specific wording; the PMBus/SMBus master host board and validation GUI/tool are user-selected. |
 | 2026/06/26 | Updated PMBus reference set to PMBus 1.3.1 Part I + Part II and documented Part III as AVSBus reference only. |
 | 2026/06/26 | Added profile validation log references for Base, M-CRPS, and TI UCD90xxx command-name/protocol comparisons. |
 | 2026/06/26 | Kept TI UCD90xxx `0xD7 RUN_TIME_CLOCK` from being reserved by the M-CRPS FWUPLOAD write-only descriptor. |
 | 2026/06/26 | Added TI UCD90xxx dispatch ownership for representative Byte/Word/Block/Send Byte overlay commands, including `0xD0`, `0xD1`, `0xDA`, and `0xF3`. |
 | 2026/06/26 | Documented PMBus/SMBus PEC framing for Write Byte, Read Byte, and combined command-read transactions. |
-| 2026/06/26 | Documented `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` versus `PMBUS_SYSTEM_POLICY_LAB_VALIDATION`, including the ARA/ARP derived defaults used by Pico validation. |
+| 2026/06/26 | Documented `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` versus `PMBUS_SYSTEM_POLICY_LAB_VALIDATION`, including the ARA/ARP derived defaults used by lab validation. |
 | 2026/06/26 | Removed the command-read prefetch path from the SMBus slave flow. Command-only repeated-start reads now save pending context at `STOP_RESTART` and dispatch/prepare the response at `SLA_R_ACK`. |
 | 2026/06/26 | Documented command profile selection, kept semantic logging disabled by default, and documented the NVIC-only timeout guard. |
 | 2026/06/25 | Guarded the normal slave-transmit NACK/STOP cleanup path so a single post-TX `0x00` controller status does not trigger CML/ALERT#/ARA or bus-error recovery during scan reads. |
-| 2026/06/25 | Documented compile-time `PMBUS_COMMAND_PROFILE` choices and the expected Pico GUI profile mapping. |
+| 2026/06/25 | Documented compile-time `PMBUS_COMMAND_PROFILE` choices and the expected validation profile mapping. |
 | 2026/06/24 | Split PMBus board binding into selectable `PMBUS_PORT_PROFILE` entries so the PMBus core can move from I2C0/PB4/PB5 to I2C1/PA2/PA3 without changing protocol or dispatch files. |
 | 2026/06/18 | Documented PMBus profile, command-group, PEC policy/backend, debug, alias/recovery, and platform porting defines; updated PMBus transaction and alias/recovery flow charts. |
 | 2026/06/14 | Initial GitHub README draft created from MCU README template. |

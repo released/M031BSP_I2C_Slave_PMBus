@@ -114,8 +114,9 @@ x, X, z, Z -> SYS_ResetChip()
 
 The implementation is intended to align with these documents:
 
+- `docs/PMBus-Specification-Rev-1-3-1-Part-I-20150313.pdf` in the Pico HID Test Tool workspace
 - `docs/PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf` in the Pico HID Test Tool workspace
-- `docs/PMBus_rev_1.2_part_1_september_2010.pdf` in the Pico HID Test Tool workspace
+- `docs/PMBus-Specification-Rev-1-3-1-Part-III-20150313.pdf` in the Pico HID Test Tool workspace, as AVSBus reference only; AVSBus is not implemented by this M032 PMBus/SMBus sample
 - `docs/M-CRPS_Base_Specification_version_1p06p00_RC1-draft7_042026.pdf` in the Pico HID Test Tool workspace, for the optional CRPS product-profile command overlay
 - `docs/UCD90xxx Sequencer and System Health Controller PMBus Command Reference.pdf` in the Pico HID Test Tool workspace, for the TI UCD90xxx command-name profile namespace
 
@@ -140,7 +141,7 @@ Supported transaction formats include:
 
 Profile policy:
 
-- The base PMBus profile follows [PMBus 1.3 specification archive](https://pmbus.org/specification-archives/?cn-reloaded=1), using local copies `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf` and `PMBus_rev_1.2_part_1_september_2010.pdf`; it does not assign product meaning to generic `USER_DATA_*` or unowned `MFR_SPECIFIC_*` commands.
+- The base PMBus profile follows [PMBus 1.3.1 specification archive](https://pmbus.org/specification-archives/?cn-reloaded=1), using local copies `PMBus-Specification-Rev-1-3-1-Part-I-20150313.pdf` and `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf`; it does not assign product meaning to generic `USER_DATA_*` or unowned `MFR_SPECIFIC_*` commands.
 - The CRPS profile is enabled by `PMBUS_ENABLE_CMD_CRPS` and maps the public [OCP M-CRPS v1.06 specification source](https://www.opencompute.org/wiki/Server/MHS/DC-MHS-Specs-and-Designs), local copy `M-CRPS_Base_Specification_version_1p06p00_RC1-draft7_042026.pdf` Table 12-38 command names, to deterministic placeholder/shadow handlers.
 - `PMBUS_COMMAND_PROFILE` selects the profile-specific command-name namespace used by debug logs and support reporting. It is intentionally separate from `PMBUS_ENABLE_CMD_CRPS` and `PMBUS_PROFILE_MINIMAL/FULL`.
   - Base example: `0xE3 -> MFR_SPECIFIC_E3`
@@ -523,6 +524,7 @@ Pico HID Test Tool repository: docs/PMBUS_TABLE31_GAP_MATRIX.md
 
 | Date | Change |
 | --- | --- |
+| 2026/06/26 | Updated PMBus reference set to PMBus 1.3.1 Part I + Part II and documented Part III as AVSBus reference only. |
 | 2026/06/26 | Added profile validation log references for Base, M-CRPS, and TI UCD90xxx command-name/protocol comparisons. |
 | 2026/06/26 | Kept TI UCD90xxx `0xD7 RUN_TIME_CLOCK` from being reserved by the M-CRPS FWUPLOAD write-only descriptor. |
 | 2026/06/26 | Added TI UCD90xxx dispatch ownership for representative Byte/Word/Block/Send Byte overlay commands, including `0xD0`, `0xD1`, `0xDA`, and `0xF3`. |

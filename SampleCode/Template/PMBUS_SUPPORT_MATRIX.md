@@ -4,10 +4,11 @@ This matrix documents the current PMBus device support in the portable framework
 
 Compliance target:
 - Treat this M032 PMBus slave as a PMBus command/transaction reference target for:
+  - `PMBus-Specification-Rev-1-3-1-Part-I-20150313.pdf`
   - `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf`
-  - `PMBus_rev_1.2_part_1_september_2010.pdf`
+  - `PMBus-Specification-Rev-1-3-1-Part-III-20150313.pdf` as AVSBus reference only; AVSBus is not implemented by this M032 PMBus/SMBus sample
 - Profile-specific source documents:
-  - Base profile: `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf` plus `PMBus_rev_1.2_part_1_september_2010.pdf`
+  - Base profile: `PMBus-Specification-Rev-1-3-1-Part-I-20150313.pdf` plus `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf`
   - M-CRPS profile: `M-CRPS_Base_Specification_version_1p06p00_RC1-draft7_042026.pdf`
   - TI UCD90xxx profile: `UCD90xxx Sequencer and System Health Controller PMBus Command Reference.pdf` (first-stage command-name/profile support; full chip validation remains product-specific)
 - Current scope is complete host-visible PMBus command/transaction behavior, including protocol, data format, status/error behavior, and PEC behavior.

@@ -529,20 +529,7 @@ Host-side validation matrix, if available: docs/PMBUS_TABLE31_GAP_MATRIX.md
 
 | Date | Change |
 | --- | --- |
-| 2026/06/26 | Removed host-board-specific and validation-tool-specific wording; the PMBus/SMBus master host board and validation GUI/tool are user-selected. |
-| 2026/06/26 | Updated PMBus reference set to PMBus 1.3.1 Part I + Part II and documented Part III as AVSBus reference only. |
-| 2026/06/26 | Added profile validation log references for Base, M-CRPS, and TI UCD90xxx command-name/protocol comparisons. |
-| 2026/06/26 | Kept TI UCD90xxx `0xD7 RUN_TIME_CLOCK` from being reserved by the M-CRPS FWUPLOAD write-only descriptor. |
-| 2026/06/26 | Added TI UCD90xxx dispatch ownership for representative Byte/Word/Block/Send Byte overlay commands, including `0xD0`, `0xD1`, `0xDA`, and `0xF3`. |
-| 2026/06/26 | Documented PMBus/SMBus PEC framing for Write Byte, Read Byte, and combined command-read transactions. |
-| 2026/06/26 | Documented `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` versus `PMBUS_SYSTEM_POLICY_LAB_VALIDATION`, including the ARA/ARP derived defaults used by lab validation. |
-| 2026/06/26 | Removed the command-read prefetch path from the SMBus slave flow. Command-only repeated-start reads now save pending context at `STOP_RESTART` and dispatch/prepare the response at `SLA_R_ACK`. |
-| 2026/06/26 | Documented command profile selection, kept semantic logging disabled by default, and documented the NVIC-only timeout guard. |
-| 2026/06/25 | Guarded the normal slave-transmit NACK/STOP cleanup path so a single post-TX `0x00` controller status does not trigger CML/ALERT#/ARA or bus-error recovery during scan reads. |
-| 2026/06/25 | Documented compile-time `PMBUS_COMMAND_PROFILE` choices and the expected validation profile mapping. |
-| 2026/06/24 | Split PMBus board binding into selectable `PMBUS_PORT_PROFILE` entries so the PMBus core can move from I2C0/PB4/PB5 to I2C1/PA2/PA3 without changing protocol or dispatch files. |
-| 2026/06/18 | Documented PMBus profile, command-group, PEC policy/backend, debug, alias/recovery, and platform porting defines; updated PMBus transaction and alias/recovery flow charts. |
-| 2026/06/14 | Initial GitHub README draft created from MCU README template. |
+| 2026/06/26 | Initial version. |
 
 ## Mermaid Flow Charts
 

@@ -33,12 +33,12 @@ Assumptions:
 
 ## System policy defaults
 
-`pmbus_cfg_user.h` separates production CRPS behavior from lab validation helpers:
+`pmbus_cfg_user.h` separates production-safe behavior from lab validation helpers:
 
-- `PMBUS_SYSTEM_POLICY_CRPS_DEFAULT`
+- `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT`
   - ARA alias defaults to disabled.
   - ARP/UDID defaults to disabled.
-  - Use this for CRPS product builds unless the final product contract explicitly requires these SMBus helpers.
+  - Use this for product builds unless the final product contract explicitly requires these SMBus helpers.
 - `PMBUS_SYSTEM_POLICY_LAB_VALIDATION`
   - ARA alias may be enabled to validate `SMBALERT# -> ARA -> normal-address recovery`.
   - ARP/UDID framework may be enabled to validate address-resolution flows.
@@ -50,6 +50,8 @@ Command profile policy:
 - Base profile keeps public PMBus names plus generic policy namespace names (`USER_DATA_00..15`, `MFR_SPECIFIC_C0..FD`), for example `0xE3 -> MFR_SPECIFIC_E3`.
 - M-CRPS profile maps public M-CRPS Table 12-38 names, for example `0xE3 -> MFR_FWUPLOAD_BLOCK_SIZE`.
 - TI UCD90xxx profile maps TI command display/debug names, for example `0xE3 -> PARM_VALUE`; full UCD90xxx chip behavior and validation remain a separate product-specific layer.
+- Disabled overlay code points are not permanently reserved. If a profile group such as `PMBUS_ENABLE_CMD_CRPS` is disabled and no compiled descriptor owns the command, traffic falls back to the generic `MFR_SPECIFIC_*` bounded volatile block shadow.
+- Profile-specific command ownership wins over feature-group reuse. Example: `0xD7` is M-CRPS `MFR_FWUPLOAD` only in the M-CRPS profile; in the TI UCD90xxx profile it is `RUN_TIME_CLOCK` Block and is kept out of the FWUPLOAD write-only descriptor. TI overlay protocols such as `0xD0 SEQ_TIMEOUT` Word, `0xD1 VOUT_CAL_MONITOR` Word, `0xDA USER_RAM_00` Byte, and `0xF3 MFR_STATUS` Block override Base/M-CRPS owners.
 
 Bit/field semantic policy:
 
@@ -239,7 +241,7 @@ Hardware note for the current M032 target:
 | `MFR_MAX_TEMP_1` | `0xC0` | Read Word | R | Vendor shadow + Telemetry shadow | Mirrors current temperature 1 placeholder. TODO: implement peak-hold/latch policy |
 | `MFR_MAX_TEMP_2` | `0xC1` | Read Word | R | Vendor shadow + Telemetry shadow | Mirrors current temperature 2 placeholder. TODO: implement peak-hold/latch policy |
 | `MFR_MAX_TEMP_3` | `0xC2` | Read Word | R | Vendor shadow + Telemetry shadow | Mirrors current temperature 3 placeholder. TODO: implement peak-hold/latch policy |
-| `MFR_SPECIFIC_C4..FD` | `0xC4..0xFD` | Block Read, Block Write | R/W | CRPS policy shadow | Unassigned manufacturer commands use volatile 16-byte scratchpads. Explicit M-CRPS profile behaviors are preserved and not overridden |
+| `MFR_SPECIFIC_C4..FD` | `0xC4..0xFD` | Block Read, Block Write | R/W | Policy shadow | Unassigned manufacturer commands use volatile 16-byte scratchpads. Explicit compiled profile behaviors are preserved and not overridden; disabled profile-overlay code points fall back to this generic shadow |
 | `MFR_COLD_REDUNDANCY_CONFIG` | `0xD0` | Read Byte, Write Byte | R/W | Vendor shadow | Vendor config byte |
 | `MFR_READ_CONFIG_FILE_SIZE` | `0xD1` | Block Read | R | Vendor shadow | 4-byte config file-size placeholder. TODO: bind to real image/config storage metadata |
 | `MFR_READ_CONFIG_BLOCK_SIZE` | `0xD2` | Read Word | R | Vendor shadow | Config block-size placeholder. TODO: bind to real image/config transport limit |
@@ -247,7 +249,7 @@ Hardware note for the current M032 target:
 | `MFR_HW_COMPATIBILITY` | `0xD4` | Read Word | R | Vendor shadow | M-CRPS hardware compatibility placeholder. TODO: bind to platform hardware compatibility policy |
 | `MFR_FWUPLOAD_CAPABILITY` | `0xD5` | Read Byte | R | Vendor shadow | M-CRPS firmware-upload capability placeholder. TODO: bind to product bootloader/update capability |
 | `MFR_FWUPLOAD_MODE` | `0xD6` | Read Byte, Write Byte | R/W | Vendor shadow | Firmware upload mode byte |
-| `MFR_FWUPLOAD` | `0xD7` | Block Write | W | Vendor shadow | FW upload block parser and state tracking |
+| `MFR_FWUPLOAD` | `0xD7` | Block Write | W | Vendor shadow | M-CRPS FW upload block parser and state tracking; not compiled as the owner for TI UCD90xxx `RUN_TIME_CLOCK` |
 | `MFR_FWUPLOAD_STATUS` | `0xD8` | Read Word | R | Vendor shadow | FW upload status word |
 | `MFR_FW_REVISION` | `0xD9` | Block Read | R | Vendor shadow | M-CRPS 7-byte firmware revision placeholder. TODO: bind to build metadata |
 | `MFR_SPDM` | `0xDA` | Block Write-Read Process Call | R/W | Vendor shadow | SPDM exchange placeholder. TODO: bind to real SPDM processor |
@@ -323,7 +325,7 @@ Recommended usage:
     - `CONTROL` line assert/deassert
     - `ALERT#` polling / optional ARA helper
 - Pico `Full` checklist auto-validates the restorable `SMBALERT_MASK` shadow plus `ALERT#` poll and `CONTROL` GPIO helper paths against this reference slave.
-- End-to-end CRPS product policy for `SMBALERT_MASK`, `ALERT# -> ARA`, and `CONTROL` effects remains product-specific.
+- End-to-end product policy for `SMBALERT_MASK`, `ALERT# -> ARA`, and `CONTROL` effects remains product-specific.
 - `Group Command` note:
   - the Pico host can now emit grouped write transport without STOP between segments
   - this matrix claims transport compatibility, not yet a formal guarantee that every application-level side effect is deferred until the final STOP for every writable command
@@ -332,7 +334,7 @@ Recommended usage:
   - These logs are integration trace hooks; product owners still need to connect the hook to actual ADC/GPIO/control-loop/NVM behavior where required.
   - If a profile document defines bit fields for a command, the corresponding semantic handler must be added before marking the profile command product-complete.
 - `ARA` is implemented through the platform alias-address contract when the MCU has spare slave address slots and lab validation policy enables it.
-  - CRPS default policy should leave ARA disabled unless the final product contract explicitly requires it.
+  - Production default policy should leave ARA disabled unless the final product contract explicitly requires it.
   - ARA response supports both host read styles:
     - 1-byte no-PEC read: returns the alerting slave write address.
     - 2-byte PEC read: returns the alerting slave write address plus SMBus PEC over `ARA read address + response address`.
@@ -342,7 +344,7 @@ Recommended usage:
   - After ARA is served, the portable alias path is inhibited until ALERT# is actually deasserted; this keeps the normal PMBus address available for `STATUS_CML` / `CLEAR_FAULTS`.
   - The alias is released on the master NACK/STOP completion path.
 - `ARP` is implemented as a framework-level alias at `0x61` when lab validation policy enables it.
-  - CRPS default policy should leave ARP/UDID disabled unless the final product contract explicitly requires SMBus address resolution.
+  - Production default policy should leave ARP/UDID disabled unless the final product contract explicitly requires SMBus address resolution.
   - `PREPARE_TO_ARP`, `GET_UDID`, `DIRECTED_GET_UDID`, `ASSIGN_ADDRESS`, and `RESET_DEVICE` are recognized.
   - The 17-byte UDID is a product-data placeholder and must be bound to real manufacturing identity before production.
 - `Zone` support includes standard `ZONE_CONFIG (0x07)` and `ZONE_ACTIVE (0x08)` plus a portable Zone Read alias.

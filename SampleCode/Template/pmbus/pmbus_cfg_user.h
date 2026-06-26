@@ -52,6 +52,8 @@
 */
 #ifndef PMBUS_COMMAND_PROFILE
 #define PMBUS_COMMAND_PROFILE                 PMBUS_COMMAND_PROFILE_BASE
+// #define PMBUS_COMMAND_PROFILE                 PMBUS_COMMAND_PROFILE_M_CRPS
+// #define PMBUS_COMMAND_PROFILE                 PMBUS_COMMAND_PROFILE_TI_UCD90XXX
 #endif
 
 /*
@@ -232,20 +234,20 @@
 #define PMBUS_SEMANTIC_QUEUE_SIZE             16U
 #endif
 
-#define PMBUS_SYSTEM_POLICY_CRPS_DEFAULT      1U
+#define PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT 1U
 #define PMBUS_SYSTEM_POLICY_LAB_VALIDATION    2U
 /*
     System policy selection:
-    - CRPS_DEFAULT keeps optional SMBus/PMBus lab helpers disabled unless a
-      final product requirement explicitly enables them.
+    - PRODUCTION_DEFAULT keeps optional SMBus/PMBus lab helpers disabled
+      unless a final product requirement explicitly enables them.
     - LAB_VALIDATION keeps ARA/ARP helper paths available so the Pico PMBus
       tester can validate edge cases during bring-up.
 */
 #ifndef PMBUS_SYSTEM_POLICY
-#define PMBUS_SYSTEM_POLICY                   PMBUS_SYSTEM_POLICY_LAB_VALIDATION
+#define PMBUS_SYSTEM_POLICY                   PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT
 #endif
 
-#if (PMBUS_SYSTEM_POLICY == PMBUS_SYSTEM_POLICY_CRPS_DEFAULT)
+#if (PMBUS_SYSTEM_POLICY == PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT)
 #define PMBUS_POLICY_DEFAULT_ARA_ALIAS        0U
 #define PMBUS_POLICY_DEFAULT_ARP              0U
 #else

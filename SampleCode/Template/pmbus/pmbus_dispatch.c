@@ -39,6 +39,14 @@ static uint8_t pmbus_dispatch_is_user_data_command(uint8_t command);
 static uint8_t pmbus_dispatch_is_mfr_policy_block_command(uint8_t command);
 static uint8_t pmbus_dispatch_is_policy_block_command(uint8_t command);
 static uint8_t pmbus_dispatch_is_extended_selector(uint8_t command);
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+static uint8_t pmbus_dispatch_load_ti_overlay_descriptor(uint8_t command);
+static uint8_t pmbus_dispatch_ti_byte_index(uint8_t command, uint8_t *index);
+static uint8_t pmbus_dispatch_ti_word_index(uint8_t command, uint8_t *index);
+static uint8_t pmbus_dispatch_is_ti_block_command(uint8_t command);
+static uint8_t pmbus_dispatch_is_ti_block_write_command(uint8_t command);
+static uint8_t pmbus_dispatch_is_ti_send_byte_command(uint8_t command);
+#endif
 static uint8_t pmbus_dispatch_store_policy_block(uint8_t command, uint8_t *payload, uint8_t data_len);
 static uint8_t pmbus_dispatch_store_extended_policy_block(uint8_t command, uint8_t *payload, uint8_t data_len);
 static uint8_t pmbus_dispatch_build_policy_block_response(uint8_t command, uint8_t *tx_buffer, uint8_t *tx_length);
@@ -85,6 +93,12 @@ static uint8_t g_pmbus_dispatch_extended_selector;
 static uint8_t g_pmbus_dispatch_extended_command;
 static uint8_t g_pmbus_dispatch_extended_length;
 static uint8_t g_pmbus_dispatch_extended_data[PMBUS_DISPATCH_POLICY_BLOCK_SIZE];
+#endif
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+#define PMBUS_DISPATCH_TI_BYTE_SHADOW_COUNT    8U
+#define PMBUS_DISPATCH_TI_WORD_SHADOW_COUNT    7U
+static uint8_t g_pmbus_dispatch_ti_byte_shadow[PMBUS_DISPATCH_TI_BYTE_SHADOW_COUNT];
+static uint16_t g_pmbus_dispatch_ti_word_shadow[PMBUS_DISPATCH_TI_WORD_SHADOW_COUNT];
 #endif
 static pmbus_command_descriptor_t g_pmbus_dispatch_dynamic_descriptor;
 
@@ -315,7 +329,9 @@ static const pmbus_command_descriptor_t g_pmbus_command_descriptors[] =
 #endif
 #if PMBUS_ENABLE_CMD_FWUPLOAD
     PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD_MODE, PMBUS_RESP_BYTE, PMBUS_CMD_FLAG_WRITE_BYTE, 0x04U),
+#if (PMBUS_COMMAND_PROFILE != PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
     PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD, PMBUS_RESP_NONE, PMBUS_CMD_FLAG_BLOCK_WRITE, 0x06U),
+#endif
     PMBUS_DESC(PMBUS_COMMAND_MFR_FWUPLOAD_STATUS, PMBUS_RESP_WORD, PMBUS_CMD_FLAG_WRITE_WORD, 0x07U),
 #endif
 #if PMBUS_ENABLE_CMD_MFR_EXT
@@ -343,6 +359,13 @@ static const pmbus_command_descriptor_t *pmbus_dispatch_find_command_descriptor(
 {
     uint8_t index;
     uint8_t count;
+
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+    if (pmbus_dispatch_load_ti_overlay_descriptor(command) != 0U)
+    {
+        return &g_pmbus_dispatch_dynamic_descriptor;
+    }
+#endif
 
     count = (uint8_t)(sizeof(g_pmbus_command_descriptors) / sizeof(g_pmbus_command_descriptors[0]));
     for (index = 0U; index < count; index++)
@@ -375,6 +398,242 @@ static const pmbus_command_descriptor_t *pmbus_dispatch_find_command_descriptor(
 
     return (const pmbus_command_descriptor_t *)0;
 }
+
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+static uint8_t pmbus_dispatch_ti_byte_index(uint8_t command, uint8_t *index)
+{
+    if (index == 0)
+    {
+        return 0U;
+    }
+
+    switch (command)
+    {
+        case 0xDAU:
+            *index = 0U;
+            return 1U;
+
+        case 0xE0U:
+            *index = 1U;
+            return 1U;
+
+        case 0xE7U:
+            *index = 2U;
+            return 1U;
+
+        case 0xEEU:
+            *index = 3U;
+            return 1U;
+
+        case 0xF5U:
+            *index = 4U;
+            return 1U;
+
+        case 0xF7U:
+            *index = 5U;
+            return 1U;
+
+        case 0xFAU:
+            *index = 6U;
+            return 1U;
+
+        case 0xFBU:
+            *index = 7U;
+            return 1U;
+
+        default:
+            return 0U;
+    }
+}
+
+static uint8_t pmbus_dispatch_ti_word_index(uint8_t command, uint8_t *index)
+{
+    if (index == 0)
+    {
+        return 0U;
+    }
+
+    switch (command)
+    {
+        case 0xD0U:
+            *index = 0U;
+            return 1U;
+
+        case 0xD1U:
+            *index = 1U;
+            return 1U;
+
+        case 0xD8U:
+            *index = 2U;
+            return 1U;
+
+        case 0xDCU:
+            *index = 3U;
+            return 1U;
+
+        case 0xE4U:
+            *index = 4U;
+            return 1U;
+
+        case 0xE5U:
+            *index = 5U;
+            return 1U;
+
+        case 0xEBU:
+            *index = 6U;
+            return 1U;
+
+        default:
+            return 0U;
+    }
+}
+
+static uint8_t pmbus_dispatch_is_ti_block_command(uint8_t command)
+{
+    switch (command)
+    {
+        case 0xB5U:
+        case 0xB6U:
+        case 0xB7U:
+        case 0xB9U:
+        case 0xD2U:
+        case 0xD3U:
+        case 0xD5U:
+        case 0xD7U:
+        case 0xDDU:
+        case 0xDFU:
+        case 0xE1U:
+        case 0xE2U:
+        case 0xE3U:
+        case 0xE8U:
+        case 0xE9U:
+        case 0xEAU:
+        case 0xECU:
+        case 0xEDU:
+        case 0xEFU:
+        case 0xF1U:
+        case 0xF2U:
+        case 0xF3U:
+        case 0xF6U:
+        case 0xF8U:
+        case 0xF9U:
+        case 0xFCU:
+        case 0xFDU:
+            return 1U;
+
+        default:
+            return 0U;
+    }
+}
+
+static uint8_t pmbus_dispatch_is_ti_block_write_command(uint8_t command)
+{
+    switch (command)
+    {
+        case 0xD2U:
+        case 0xD3U:
+        case 0xD5U:
+        case 0xD7U:
+        case 0xE1U:
+        case 0xE2U:
+        case 0xE3U:
+        case 0xE8U:
+        case 0xE9U:
+        case 0xEAU:
+        case 0xEDU:
+        case 0xEFU:
+        case 0xF1U:
+        case 0xF2U:
+        case 0xF6U:
+        case 0xF8U:
+        case 0xF9U:
+        case 0xFCU:
+            return 1U;
+
+        default:
+            return 0U;
+    }
+}
+
+static uint8_t pmbus_dispatch_is_ti_send_byte_command(uint8_t command)
+{
+    switch (command)
+    {
+        case 0xD4U:
+        case 0xD9U:
+        case 0xDBU:
+        case 0xF0U:
+            return 1U;
+
+        default:
+            return 0U;
+    }
+}
+
+static uint8_t pmbus_dispatch_load_ti_overlay_descriptor(uint8_t command)
+{
+    uint8_t index;
+
+    index = 0U;
+
+    if (pmbus_dispatch_ti_byte_index(command, &index) != 0U)
+    {
+        g_pmbus_dispatch_dynamic_descriptor.command = command;
+        g_pmbus_dispatch_dynamic_descriptor.read_kind = PMBUS_RESP_BYTE;
+        g_pmbus_dispatch_dynamic_descriptor.flags = PMBUS_CMD_FLAG_WRITE_BYTE;
+        g_pmbus_dispatch_dynamic_descriptor.query_data_format = 0x04U;
+        return 1U;
+    }
+
+    if (pmbus_dispatch_ti_word_index(command, &index) != 0U)
+    {
+        g_pmbus_dispatch_dynamic_descriptor.command = command;
+        g_pmbus_dispatch_dynamic_descriptor.read_kind = PMBUS_RESP_WORD;
+        g_pmbus_dispatch_dynamic_descriptor.flags = PMBUS_CMD_FLAG_WRITE_WORD;
+        g_pmbus_dispatch_dynamic_descriptor.query_data_format = 0x00U;
+        return 1U;
+    }
+
+    if (command == 0xD6U)
+    {
+        g_pmbus_dispatch_dynamic_descriptor.command = command;
+        g_pmbus_dispatch_dynamic_descriptor.read_kind = PMBUS_RESP_BYTE;
+        g_pmbus_dispatch_dynamic_descriptor.flags = 0U;
+        g_pmbus_dispatch_dynamic_descriptor.query_data_format = 0x04U;
+        return 1U;
+    }
+
+    if (command == 0xDEU)
+    {
+        g_pmbus_dispatch_dynamic_descriptor.command = command;
+        g_pmbus_dispatch_dynamic_descriptor.read_kind = PMBUS_RESP_NONE;
+        g_pmbus_dispatch_dynamic_descriptor.flags = PMBUS_CMD_FLAG_WRITE_WORD;
+        g_pmbus_dispatch_dynamic_descriptor.query_data_format = 0x07U;
+        return 1U;
+    }
+
+    if (pmbus_dispatch_is_ti_send_byte_command(command) != 0U)
+    {
+        g_pmbus_dispatch_dynamic_descriptor.command = command;
+        g_pmbus_dispatch_dynamic_descriptor.read_kind = PMBUS_RESP_NONE;
+        g_pmbus_dispatch_dynamic_descriptor.flags = PMBUS_CMD_FLAG_SEND_BYTE;
+        g_pmbus_dispatch_dynamic_descriptor.query_data_format = 0x07U;
+        return 1U;
+    }
+
+    if (pmbus_dispatch_is_ti_block_command(command) != 0U)
+    {
+        g_pmbus_dispatch_dynamic_descriptor.command = command;
+        g_pmbus_dispatch_dynamic_descriptor.read_kind = PMBUS_RESP_BLOCK;
+        g_pmbus_dispatch_dynamic_descriptor.flags = pmbus_dispatch_is_ti_block_write_command(command) != 0U ?
+            PMBUS_CMD_FLAG_BLOCK_WRITE : 0U;
+        g_pmbus_dispatch_dynamic_descriptor.query_data_format = 0x06U;
+        return 1U;
+    }
+
+    return 0U;
+}
+#endif
 
 static uint8_t pmbus_dispatch_command_has_flag(uint8_t command, uint8_t flag)
 {
@@ -413,23 +672,27 @@ static uint8_t pmbus_dispatch_is_mfr_policy_block_command(uint8_t command)
         return 0U;
     }
 
+    /* Keep generic MFR_SPECIFIC shadows available in Base/TI builds.  Only
+       exclude overlay codes that have a real descriptor in this build. */
     switch (command)
     {
+#if PMBUS_ENABLE_CMD_MFR_EXT
         case PMBUS_COMMAND_MFR_COLD_REDUNDANCY_CONFIG:
-        case PMBUS_COMMAND_MFR_READ_CONFIG_FILE_SIZE:
-        case PMBUS_COMMAND_MFR_READ_CONFIG_BLOCK_SIZE:
-        case PMBUS_COMMAND_MFR_READ_CONFIG_FILE:
         case PMBUS_COMMAND_MFR_HW_COMPATIBILITY:
         case PMBUS_COMMAND_MFR_FWUPLOAD_CAPABILITY:
-        case PMBUS_COMMAND_MFR_FWUPLOAD_MODE:
-        case PMBUS_COMMAND_MFR_FWUPLOAD:
-        case PMBUS_COMMAND_MFR_FWUPLOAD_STATUS:
         case PMBUS_COMMAND_MFR_FW_REVISION:
-        case PMBUS_COMMAND_MFR_SPDM:
         case PMBUS_COMMAND_MFR_FRU_PROTECTION:
         case PMBUS_COMMAND_MFR_BLACKBOX:
         case PMBUS_COMMAND_MFR_REAL_TIME_BLACK_BOX:
         case PMBUS_COMMAND_MFR_SYSTEM_BLACK_BOX:
+        case PMBUS_COMMAND_MFR_PWOK_WARNING_TIME:
+        case PMBUS_COMMAND_MFR_MAX_IOUT_CAPABILITY:
+            return 0U;
+#if PMBUS_ENABLE_CMD_CRPS
+        case PMBUS_COMMAND_MFR_READ_CONFIG_FILE_SIZE:
+        case PMBUS_COMMAND_MFR_READ_CONFIG_BLOCK_SIZE:
+        case PMBUS_COMMAND_MFR_READ_CONFIG_FILE:
+        case PMBUS_COMMAND_MFR_SPDM:
         case PMBUS_COMMAND_MFR_BLACK_BOX_CONFIG:
         case PMBUS_COMMAND_MFR_CLEAR_BLACK_BOX:
         case PMBUS_COMMAND_MFR_LINE_STATUS:
@@ -441,11 +704,20 @@ static uint8_t pmbus_dispatch_is_mfr_policy_block_command(uint8_t command)
         case PMBUS_COMMAND_MFR_TOT_POUT_MAX:
         case PMBUS_COMMAND_MFR_VOUT_MARGINING:
         case PMBUS_COMMAND_MFR_OCWPL1_SETTING:
-        case PMBUS_COMMAND_MFR_PWOK_WARNING_TIME:
-        case PMBUS_COMMAND_MFR_MAX_IOUT_CAPABILITY:
         case PMBUS_COMMAND_MFR_FPC_MAIN_MIN_OFF_TIME:
         case PMBUS_COMMAND_MFR_FPC_12VSB_MIN_OFF_TIME:
             return 0U;
+#endif
+#endif
+#if PMBUS_ENABLE_CMD_FWUPLOAD
+        case PMBUS_COMMAND_MFR_FWUPLOAD_MODE:
+        case PMBUS_COMMAND_MFR_FWUPLOAD_STATUS:
+            return 0U;
+#if (PMBUS_COMMAND_PROFILE != PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+        case PMBUS_COMMAND_MFR_FWUPLOAD:
+            return 0U;
+#endif
+#endif
 
         default:
             return 1U;
@@ -923,6 +1195,25 @@ static uint8_t pmbus_dispatch_build_page_plus_read_response(uint8_t *payload, ui
 
 static uint8_t pmbus_dispatch_build_byte_response(uint8_t command, uint8_t *tx_buffer, uint8_t *tx_length)
 {
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+    uint8_t ti_index;
+
+    ti_index = 0U;
+    if (command == 0xD6U)
+    {
+        tx_buffer[0] = 0U;
+        *tx_length = 1U;
+        return 1U;
+    }
+
+    if (pmbus_dispatch_ti_byte_index(command, &ti_index) != 0U)
+    {
+        tx_buffer[0] = g_pmbus_dispatch_ti_byte_shadow[ti_index];
+        *tx_length = 1U;
+        return 1U;
+    }
+#endif
+
     switch (command)
     {
 #if PMBUS_ENABLE_CMD_CORE
@@ -1120,8 +1411,20 @@ static uint8_t pmbus_dispatch_build_byte_response(uint8_t command, uint8_t *tx_b
 static uint8_t pmbus_dispatch_build_word_response(uint8_t command, uint8_t *tx_buffer, uint8_t *tx_length)
 {
     uint16_t value;
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+    uint8_t ti_index;
+#endif
 
     value = 0U;
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+    ti_index = 0U;
+    if (pmbus_dispatch_ti_word_index(command, &ti_index) != 0U)
+    {
+        pmbus_dispatch_store_word(tx_buffer, g_pmbus_dispatch_ti_word_shadow[ti_index]);
+        *tx_length = 2U;
+        return 1U;
+    }
+#endif
 
     switch (command)
     {
@@ -1584,6 +1887,19 @@ static uint8_t pmbus_dispatch_build_block_response(uint8_t command, uint8_t *tx_
     data_ptr = (uint8_t *)0;
     length = 0U;
 
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+    if (pmbus_dispatch_is_ti_block_command(command) != 0U)
+    {
+        if (pmbus_dispatch_build_policy_block_response(command, tx_buffer, tx_length) == 0U)
+        {
+            tx_buffer[0] = 1U;
+            tx_buffer[1] = command;
+            *tx_length = 2U;
+        }
+        return 1U;
+    }
+#endif
+
     switch (command)
     {
 #if PMBUS_ENABLE_CMD_ENERGY
@@ -1880,6 +2196,9 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
 #endif
     uint16_t word_value;
     uint8_t cml_mask;
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+    uint8_t ti_index;
+#endif
 #if PMBUS_ENABLE_CMD_PAGE_PLUS
     uint8_t saved_page;
     uint8_t target_command;
@@ -1888,10 +2207,19 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
 #endif
 
     *tx_length = 0U;
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+    ti_index = 0U;
+#endif
 
     switch (transaction->protocol)
     {
         case PMBUS_PROTOCOL_SEND_BYTE:
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+            if (pmbus_dispatch_is_ti_send_byte_command(transaction->command) != 0U)
+            {
+                return 1U;
+            }
+#endif
 #if PMBUS_ENABLE_CMD_CORE
             if (transaction->command == PMBUS_COMMAND_CLEAR_FAULTS)
             {
@@ -1921,6 +2249,14 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
             {
                 break;
             }
+
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+            if (pmbus_dispatch_ti_byte_index(transaction->command, &ti_index) != 0U)
+            {
+                g_pmbus_dispatch_ti_byte_shadow[ti_index] = transaction->payload[0];
+                return 1U;
+            }
+#endif
 
             switch (transaction->command)
             {
@@ -2072,6 +2408,19 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
             }
 
             word_value = (uint16_t)(((uint16_t)transaction->payload[1] << 8) | transaction->payload[0]);
+
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+            if (pmbus_dispatch_ti_word_index(transaction->command, &ti_index) != 0U)
+            {
+                g_pmbus_dispatch_ti_word_shadow[ti_index] = word_value;
+                return 1U;
+            }
+
+            if (transaction->command == 0xDEU)
+            {
+                return 1U;
+            }
+#endif
 
             switch (transaction->command)
             {
@@ -2440,6 +2789,13 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 break;
             }
 
+#if (PMBUS_COMMAND_PROFILE == PMBUS_COMMAND_PROFILE_TI_UCD90XXX)
+            if (pmbus_dispatch_is_ti_block_write_command(transaction->command) != 0U)
+            {
+                return 1U;
+            }
+#endif
+
 #if PMBUS_ENABLE_CMD_POLICY
             if (pmbus_dispatch_is_policy_block_command(transaction->command) != 0U)
             {
@@ -2510,7 +2866,7 @@ uint8_t pmbus_dispatch_execute(pmbus_dispatch_transaction_t *transaction, uint8_
                 }
             }
 #endif
-#if PMBUS_ENABLE_CMD_FWUPLOAD
+#if (PMBUS_ENABLE_CMD_FWUPLOAD && (PMBUS_COMMAND_PROFILE != PMBUS_COMMAND_PROFILE_TI_UCD90XXX))
             if (transaction->command == PMBUS_COMMAND_MFR_FWUPLOAD)
             {
                 if (transaction->data_len >= 1U)

@@ -23,12 +23,13 @@ Use assumptions:
 - PEC behavior follows `PMBUS_PEC_POLICY`; optional mode accepts host PEC when present and always generates slave read PEC.
 - Logic analyzer should decode I2C/SMBus with repeated START enabled.
 - I2C instance and pin binding come from `PMBUS_PORT_PROFILE` in `board_config.h`; changing the port profile must not require edits in PMBus protocol, dispatch, or application command files.
-- `PMBUS_SYSTEM_POLICY_CRPS_DEFAULT` disables ARA/ARP helpers unless product requirements explicitly enable them.
+- `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` disables ARA/ARP helpers unless product requirements explicitly enable them.
 - `PMBUS_SYSTEM_POLICY_LAB_VALIDATION` enables ARA/ARP helper paths for Pico tool edge-case validation.
 - `PMBUS_COMMAND_PROFILE` changes command display/debug names only; verify representative profile names when switching it:
   - Base: `0xE3 -> MFR_SPECIFIC_E3`
   - M-CRPS: `0xE3 -> MFR_FWUPLOAD_BLOCK_SIZE`
   - TI UCD90xxx: `0xE3 -> PARM_VALUE`
+- Verify profile-specific command ownership conflicts do not leak across profiles; TI UCD90xxx `0xD7 RUN_TIME_CLOCK` must not be reserved by the M-CRPS `MFR_FWUPLOAD` write-only descriptor. TI overlay protocols such as `0xD0 SEQ_TIMEOUT` Word, `0xD1 VOUT_CAL_MONITOR` Word, `0xDA USER_RAM_00` Byte, and `0xF3 MFR_STATUS` Block must not reuse Base/M-CRPS owners.
 - `PMBUS_DEBUG_PRINT_SEMANTICS` should be enabled when validating profile bit/field coverage.
   - Expected: standard bit-defined commands print recognized bit/field names from background context.
   - Expected: profile-specific commands print the selected profile command name.
@@ -73,6 +74,8 @@ Use assumptions:
   - M-CRPS profile example: `0xE3 -> MFR_FWUPLOAD_BLOCK_SIZE`
   - TI UCD90xxx profile example: `0xE3 -> PARM_VALUE`
 - Expected: semantic logs use the active profile command name.
+- In a Base build with `PMBUS_ENABLE_CMD_CRPS=0`, read CRPS-overlay code points such as `0xD1` through the generic `MFR_SPECIFIC_D1` path.
+- Expected: the command uses the generic volatile block shadow, not `unsupported command`.
 - A command that has documented bit fields in its profile document is not profile-complete until a dedicated semantic handler exists for those bits.
 
 ## 2. Byte Read / Write Commands
@@ -419,8 +422,9 @@ Use assumptions:
   - Block Read
   - Expected: 8-byte placeholder block
   - TODO: bind to measured or qualified efficiency table before product release
-- Unassigned `MFR_SPECIFIC_C4..FD`
+- Unassigned / disabled-overlay `MFR_SPECIFIC_C4..FD`
   - Keep M-CRPS assigned profile commands on their dedicated behavior paths
+  - In Base profile, disabled M-CRPS overlay code points such as `D1/D2/D3/DA/DF/E0..E4/E9/EB..EE/F2/F3` fall back to the generic MFR shadow
   - For at least one unassigned command, perform the same Block Write / Block Read / QUERY checks as `USER_DATA`
   - Expected: volatile 16-byte shadow behavior, reset on power cycle
 - `MFR_SPECIFIC_COMMAND_EXT (0xFE)` / `PMBUS_COMMAND_EXT (0xFF)`
@@ -432,15 +436,15 @@ Use assumptions:
 - `MFR_COLD_REDUNDANCY_CONFIG (0xD0)`
   - Write Byte, then Read Byte
   - Expected: readback matches written value
-- `MFR_READ_CONFIG_FILE_SIZE (0xD1)`
+- `MFR_READ_CONFIG_FILE_SIZE (0xD1)` when M-CRPS overlay is enabled
   - Block Read
   - Expected: 4-byte placeholder
   - TODO: bind to real config-image file-size metadata
-- `MFR_READ_CONFIG_BLOCK_SIZE (0xD2)`
+- `MFR_READ_CONFIG_BLOCK_SIZE (0xD2)` when M-CRPS overlay is enabled
   - Read Word
   - Expected: non-zero block-size placeholder
   - TODO: bind to real config transport limit
-- `MFR_READ_CONFIG_FILE (0xD3)`
+- `MFR_READ_CONFIG_FILE (0xD3)` when M-CRPS overlay is enabled
   - Block Write-Read Process Call
   - Expected: deterministic placeholder block response
   - TODO: use request payload as real file offset/selector
@@ -531,6 +535,8 @@ Use assumptions:
 - UCD90xxx command profile
   - Not part of the default CRPS/M-CRPS validation checklist
   - Validate under the `TI UCD90xxx` vendor profile to avoid manufacturer-command namespace conflicts
+  - Expected: `0xD7 RUN_TIME_CLOCK` is readable through the TI profile placeholder path and is not reported as M-CRPS `MFR_FWUPLOAD` / unsupported
+  - Expected: `0xD0`, `0xD1`, `0xDA`, and `0xF3` use the TI Word/Word/Byte/Block protocols without PEC or length mismatches
   - Current automated scope is command naming/profile selection and standard PMBus transport reuse; full UCD90xxx device-model behavior remains TODO
 
 ## 9. PEC Validation
@@ -582,11 +588,11 @@ Use assumptions:
 - `COEFFICIENTS 0x30` block write-read process call with PEC
   - `S B4 A 30 A 01 A <TARGET_CMD> A <PEC> A Sr B5 A 05 A <M_L> A <M_H> A <B_L> A <B_H> A <R> A <PEC> N P`
 - `ARA 0x0C` when ALERT# asserted
-  - Lab-validation policy only unless the final CRPS product contract enables ARA
+  - Lab-validation policy only unless the final product contract enables ARA
   - no PEC host read: `S 19 A <ALERTING_WRITE_ADDR> N P`
   - PEC host read: `S 19 A <ALERTING_WRITE_ADDR> A <PEC> N P`
 - `ARP 0x61 GET_UDID`
-  - Lab-validation policy only unless the final CRPS product contract enables SMBus ARP/UDID
+  - Lab-validation policy only unless the final product contract enables SMBus ARP/UDID
   - `S C2 A 03 A Sr C3 A 11 A <17-byte UDID> A <PEC> N P`
 - `Zone Read 0x28`
   - `S 51 A 05 A <ZONE_CONFIG_L> A <ZONE_CONFIG_H> A <ZONE_ACTIVE_L> A <ZONE_ACTIVE_H> A <STATUS_BYTE> A <PEC> N P`

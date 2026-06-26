@@ -140,8 +140,8 @@ Supported transaction formats include:
 
 Profile policy:
 
-- The base PMBus profile follows `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf` and `PMBus_rev_1.2_part_1_september_2010.pdf`; it does not assign product meaning to generic `USER_DATA_*` or unowned `MFR_SPECIFIC_*` commands.
-- The CRPS profile is enabled by `PMBUS_ENABLE_CMD_CRPS` and maps the public `M-CRPS_Base_Specification_version_1p06p00_RC1-draft7_042026.pdf` Table 12-38 command names to deterministic placeholder/shadow handlers.
+- The base PMBus profile follows [PMBus 1.3 specification archive](https://pmbus.org/specification-archives/?cn-reloaded=1), using local copies `PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf` and `PMBus_rev_1.2_part_1_september_2010.pdf`; it does not assign product meaning to generic `USER_DATA_*` or unowned `MFR_SPECIFIC_*` commands.
+- The CRPS profile is enabled by `PMBUS_ENABLE_CMD_CRPS` and maps the public [OCP M-CRPS v1.06 specification source](https://www.opencompute.org/wiki/Server/MHS/DC-MHS-Specs-and-Designs), local copy `M-CRPS_Base_Specification_version_1p06p00_RC1-draft7_042026.pdf` Table 12-38 command names, to deterministic placeholder/shadow handlers.
 - `PMBUS_COMMAND_PROFILE` selects the profile-specific command-name namespace used by debug logs and support reporting. It is intentionally separate from `PMBUS_ENABLE_CMD_CRPS` and `PMBUS_PROFILE_MINIMAL/FULL`.
   - Base example: `0xE3 -> MFR_SPECIFIC_E3`
   - M-CRPS example: `0xE3 -> MFR_FWUPLOAD_BLOCK_SIZE`
@@ -150,7 +150,7 @@ Profile policy:
 - Profile-specific command ownership must follow the selected `PMBUS_COMMAND_PROFILE`. For example, `0xD7` is M-CRPS `MFR_FWUPLOAD` only in the M-CRPS profile; in the TI UCD90xxx profile it is `RUN_TIME_CLOCK` Block. TI overlay protocols such as `0xD0 SEQ_TIMEOUT` Word, `0xD1 VOUT_CAL_MONITOR` Word, `0xDA USER_RAM_00` Byte, and `0xF3 MFR_STATUS` Block must not be blocked by Base/M-CRPS descriptors.
 - `PMBUS_SYSTEM_POLICY` is independent from the command profile. `PMBUS_SYSTEM_POLICY_PRODUCTION_DEFAULT` keeps optional lab helpers such as ARA alias and ARP disabled by default, while `PMBUS_SYSTEM_POLICY_LAB_VALIDATION` enables them for Pico validation.
 - CRPS placeholder values are intentionally stable for host validation; source comments mark where real PSU telemetry, inventory, blackbox, firmware-upload, LED, timing, and protection policy must be connected later.
-- UCD90xxx command names are available through `PMBUS_COMMAND_PROFILE_TI_UCD90XXX`. Target-specific UCD90xxx device emulation remains product/application policy and should be implemented separately from the common PMBus transport.
+- UCD90xxx command names are available through `PMBUS_COMMAND_PROFILE_TI_UCD90XXX` and follow the [TI UCD90xxx PMBus command reference](https://www.ti.com/lit/ug/slvu352g/slvu352g.pdf), local copy `UCD90xxx Sequencer and System Health Controller PMBus Command Reference.pdf`. Target-specific UCD90xxx device emulation remains product/application policy and should be implemented separately from the common PMBus transport.
 
 Command support and validation status are tracked in:
 
@@ -184,14 +184,6 @@ Profile-dependent examples captured in the attached logs:
 | `0xE3` | `MFR_SPECIFIC_E3`, `BLOCK_READ` | `MFR_FWUPLOAD_BLOCK_SIZE`, `READ_WORD` | `PARM_VALUE`, `BLOCK_READ` |
 | `0xEE` | `MFR_SPECIFIC_EE`, `BLOCK_READ` | `MFR_OCWPL1_SETTING`, `BLOCK_READ` | `LOGGED_COMMON_PEAKS`, `READ_BYTE` |
 | `0xF3` | `MFR_SPECIFIC_F3`, `BLOCK_READ` | `MFR_FPC_12VSB_MIN_OFF_TIME`, `READ_WORD` / `WRITE_WORD` | `MFR_STATUS`, `BLOCK_READ` |
-
-Useful log searches:
-
-```text
-rg -n "cmd=0xD0|SEQ_TIMEOUT|MFR_COLD_REDUNDANCY_CONFIG|MFR_SPECIFIC_D0" teraterm_*.log
-rg -n "cmd=0xE3|PARM_VALUE|MFR_FWUPLOAD_BLOCK_SIZE|MFR_SPECIFIC_E3" teraterm_*.log
-rg -n "cmd=0xF3|MFR_STATUS|MFR_FPC_12VSB_MIN_OFF_TIME|MFR_SPECIFIC_F3" teraterm_*.log
-```
 
 ## Important Product Note
 

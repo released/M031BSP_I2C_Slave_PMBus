@@ -2,7 +2,7 @@
 
 Nuvoton M031 PMBus/SMBus slave firmware validation.
 
-Last updated: 2026/06/26
+Last updated: 2026/06/28
 
 ## Overview
 
@@ -64,6 +64,9 @@ SampleCode/Template/pmbus/                 PMBus protocol, dispatch, and platfor
 SampleCode/Template/Keil/Template.uvprojx  Keil project
 SampleCode/Template/PMBUS_SUPPORT_MATRIX.md
 SampleCode/Template/PMBUS_VALIDATION_CHECKLIST.md
+SMBusI2CScriptForm.csv                     TI SMBus/I2C/SAA Tool ScriptForm validation sequence
+teraterm_TI_script.log                     Reference UART capture from the TI ScriptForm run
+TI_SMBus_I2C_SAA_Tool_Batch_file.jpg       TI SMBus/I2C/SAA Tool batch-file setup screenshot
 ```
 
 ## Build
@@ -225,6 +228,99 @@ Recommended validation flow:
 9. Run `Scan`.
 10. Run quick-test groups in order: `Basic`, `PEC`, `Error`, `Telemetry`, `MFR`, `Full`.
 11. Confirm the tool log and MCU UART log match expected command, protocol, PEC, and payload behavior.
+
+## TI USB-to-GPIO ScriptForm Validation
+
+This workspace also includes a host-side reference run using a TI USB-to-GPIO adapter with the TI SMBus & I2C & SAA Debug Tool batch-file flow. This is an optional validation path for checking the MCU PMBus slave without depending on any particular GUI implementation.
+
+The TI host utility is included with TI Fusion Digital Power Designer:
+
+```text
+https://www.ti.com/tool/FUSION_DIGITAL_POWER_DESIGNER
+```
+
+After installing Fusion Digital Power Designer, use the included `SMBus & I2C & SAA Debug Tool` to run the ScriptForm CSV. The included script is mainly for the M-CRPS profile because most scripted PMBus/SMBus commands follow the M-CRPS command namespace and validation order.
+
+Reference files:
+
+| File | Purpose |
+| --- | --- |
+| `SMBusI2CScriptForm.csv` | TI ScriptForm CSV sequence generated from the M-CRPS validation command order. |
+| `TI_SMBus_I2C_SAA_Tool_Batch_file.jpg` | Screenshot of the TI SMBus & I2C & SAA Debug Tool batch-file setup. |
+| `teraterm_TI_script.log` | UART0 capture from the MCU while the TI ScriptForm sequence was running. |
+
+![TI SMBus & I2C & SAA Debug Tool batch-file setup](TI_SMBus_I2C_SAA_Tool_Batch_file.jpg)
+
+Recommended TI ScriptForm setup:
+
+1. Program this firmware and open UART0 at `115200 8N1`.
+2. Connect TI USB-to-GPIO to the PMBus pins and common GND.
+3. Set the target 7-bit address to `0x5A`.
+4. Import or run `SMBusI2CScriptForm.csv` from the TI SMBus & I2C & SAA Debug Tool batch-file flow.
+5. Keep the `Pause,10,` row after each command. It gives the 115200-baud debug UART enough time to drain during long scripted runs.
+6. Match the firmware build profile with the script profile. The included reference CSV targets the M-CRPS command namespace and should be regenerated before using it as a PMBus Base or TI UCD90xxx profile script.
+
+Reference run summary from `teraterm_TI_script.log`:
+
+| Item | Result |
+| --- | --- |
+| Executable script commands | 1275 |
+| `Pause,10,` rows | 1275 |
+| MCU RX frames logged | 1275 |
+| MCU TX frames logged | 1183 |
+| `PMBus PEC error` lines | 0 |
+| RX frames with `valid=0` | 0 |
+| Unsupported-command lines | 8 expected negative-path probes |
+
+Representative discovery/readback log:
+
+```text
+PMBus RX cmd=0x98 (PMBUS_REVISION) raw=1 payload=0 proto=4 rs=1 pec=0 valid=1
+PMBus TX cmd=0x98 (PMBUS_REVISION) proto=4 (READ_BYTE) len=2 value=0x33 | part1=1.3 | part2=1.3 | PEC OK | PEC(tx=0xAF, calc=0xAF)
+PMBus RX cmd=0x99 (MFR_ID) raw=1 payload=0 proto=8 rs=1 pec=0 valid=1
+PMBus TX cmd=0x99 (MFR_ID) proto=8 (BLOCK_READ) len=12 value="MFR_ID_001" | raw=0A 4D 46 52 5F 49 44 5F 30 30 31 | PEC OK | PEC(tx=0x0B, calc=0x0B)
+PMBus RX cmd=0x9A (MFR_MODEL) raw=1 payload=0 proto=8 rs=1 pec=0 valid=1
+PMBus TX cmd=0x9A (MFR_MODEL) proto=8 (BLOCK_READ) len=15 value="MFR_MODEL_001" | raw=0D 4D 46 52 5F 4D 4F 44 45 4C 5F 30 30 31 | PEC OK | PEC(tx=0x06, calc=0x06)
+```
+
+Representative write-only frame with PEC:
+
+```text
+PMBus RX cmd=0x03 (CLEAR_FAULTS) raw=2 payload=0 proto=1 rs=0 pec=1 valid=1
+address=0xB4:[0x03],[0x12],
+PMBus write done cmd=0x03 len=0
+```
+
+Representative M-CRPS profile command decode:
+
+```text
+PMBus RX cmd=0xD0 (MFR_COLD_REDUNDANCY_CONFIG) raw=1 payload=0 proto=4 rs=1 pec=0 valid=1
+address=0xB4:[0xD0],
+PMBus TX cmd=0xD0 (MFR_COLD_REDUNDANCY_CONFIG) proto=4 (READ_BYTE) len=2 raw=00 E1 | PEC OK | PEC(tx=0xE1, calc=0xE1)
+PMBus RX cmd=0xE3 (MFR_FWUPLOAD_BLOCK_SIZE) raw=1 payload=0 proto=5 rs=1 pec=0 valid=1
+address=0xB4:[0xE3],
+PMBus TX cmd=0xE3 (MFR_FWUPLOAD_BLOCK_SIZE) proto=5 (READ_WORD) len=3 raw=20 00 94 | PEC OK | PEC(tx=0x94, calc=0x94)
+```
+
+Representative negative-path probes:
+
+```text
+PMBus RX cmd=0x0F (UNKNOWN) raw=3 payload=2 proto=0 rs=0 pec=0 valid=1
+address=0xB4:[0x0F],[0x36],[0x00],
+PMBus unsupported cmd=0x0F frame=3
+PMBus RX cmd=0x7E (STATUS_CML) raw=1 payload=0 proto=4 rs=1 pec=0 valid=1
+address=0xB4:[0x7E],
+PMBus TX cmd=0x7E (STATUS_CML) proto=4 (READ_BYTE) len=2 raw=80 0C | PEC OK | PEC(tx=0x0C, calc=0x0C)
+
+PMBus RX cmd=0x79 (STATUS_WORD) raw=3 payload=2 proto=0 rs=0 pec=0 valid=1
+address=0xB4:[0x79],[0x73],[0x00],
+PMBus unsupported cmd=0x79 frame=3
+PMBus RX cmd=0x7E (STATUS_CML) raw=1 payload=0 proto=4 rs=1 pec=0 valid=1
+address=0xB4:[0x7E],
+PMBus TX cmd=0x7E (STATUS_CML) proto=4 (READ_BYTE) len=2 raw=40 42 | PEC OK | PEC(tx=0x42, calc=0x42)
+```
+
+The `0x0F` unsupported command and write-form `0x79` `STATUS_WORD` rows are intentional negative-path checks from the script. They should produce `PMBus unsupported cmd=...` and then set/verify `STATUS_CML`; they are not transport failures.
 
 ## Expected Validation Signals
 
@@ -452,7 +548,9 @@ Buffer and recovery settings:
 | `PMBUS_RX_BUFFER_SIZE` | `40U` | Fixed RX buffer size. |
 | `PMBUS_TX_BUFFER_SIZE` | `34U` | Fixed TX buffer size, sized for 32-byte block data plus count/PEC headroom. |
 | `PMBUS_MAX_BLOCK_SIZE` | `32U` | Maximum PMBus block payload length. |
-| `PMBUS_DEBUG_QUEUE_SIZE` | `16U` | Background debug event queue depth. |
+| `PMBUS_DEBUG_QUEUE_SIZE` | `64U` | Background debug event queue depth. |
+| `PMBUS_DEBUG_FRAME_QUEUE_SIZE` | `16U` | RX frame snapshot queue depth used by `PMBUS_DEBUG_PRINT_RX_FRAME`. |
+| `PMBUS_DEBUG_TX_QUEUE_SIZE` | `16U` | TX snapshot queue depth used by `PMBUS_DEBUG_PRINT_TX_READY`. |
 | `PMBUS_SEMANTIC_QUEUE_SIZE` | `16U` | Background semantic hook queue depth. Increase this if a checklist burst reports dropped semantic events. |
 | `PMBUS_ENABLE_SLAVE_RECOVER` | `1U` | Enables stuck-bus / timeout recovery path. |
 | `PMBUS_I2C_BUS_CLEAR_PULSES` | `9U` | SCL pulses used for bus-clear recovery. |

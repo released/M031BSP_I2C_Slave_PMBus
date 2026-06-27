@@ -81,8 +81,13 @@ typedef struct
     const char *name;
 } pmbus_command_name_t;
 
+#ifndef PMBUS_DEBUG_FRAME_QUEUE_SIZE
 #define PMBUS_DEBUG_FRAME_QUEUE_SIZE          4U
+#endif
+
+#ifndef PMBUS_DEBUG_TX_QUEUE_SIZE
 #define PMBUS_DEBUG_TX_QUEUE_SIZE             4U
+#endif
 
 typedef struct
 {

@@ -32,7 +32,9 @@
 #define PMBUS_RX_BUFFER_SIZE                  40U
 #define PMBUS_TX_BUFFER_SIZE                  34U
 #define PMBUS_MAX_BLOCK_SIZE                  32U
-#define PMBUS_DEBUG_QUEUE_SIZE                16U
+#define PMBUS_DEBUG_QUEUE_SIZE                64U
+#define PMBUS_DEBUG_FRAME_QUEUE_SIZE          16U
+#define PMBUS_DEBUG_TX_QUEUE_SIZE             16U
 
 #define PMBUS_PROFILE_MINIMAL                 1U
 #define PMBUS_PROFILE_FULL                    2U
@@ -51,8 +53,8 @@
       device emulation remains product/application policy.
 */
 #ifndef PMBUS_COMMAND_PROFILE
-#define PMBUS_COMMAND_PROFILE                 PMBUS_COMMAND_PROFILE_BASE
-// #define PMBUS_COMMAND_PROFILE                 PMBUS_COMMAND_PROFILE_M_CRPS
+// #define PMBUS_COMMAND_PROFILE                 PMBUS_COMMAND_PROFILE_BASE
+#define PMBUS_COMMAND_PROFILE                 PMBUS_COMMAND_PROFILE_M_CRPS
 // #define PMBUS_COMMAND_PROFILE                 PMBUS_COMMAND_PROFILE_TI_UCD90XXX
 #endif
 

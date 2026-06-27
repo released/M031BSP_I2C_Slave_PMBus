@@ -4,9 +4,6 @@
 
 /*
     Active NuMicro Cortex-M port implementation.
-
-    Keep this file aligned with pmbus_io_cortexm_generic.c.
-    The generic file is a reusable reference for M031 / M032 / M480 style ports.
 */
 
 static uint8_t g_pmbus_i2c_next_ctrl = I2C_CTL_SI_AA;

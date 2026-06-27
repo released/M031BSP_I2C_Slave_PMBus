@@ -8,10 +8,7 @@
     - Keep pmbus_app.c/.h, pmbus_dispatch.c/.h, pmbus_drv.c/.h,
       and pmbus_pec.c/.h unchanged across MCU families when possible.
     - Re-implement this API for each platform such as MS51, M032, or M480.
-    - This repository keeps reusable source references in:
-      pmbus_io_8051_generic.c
-      pmbus_io_cortexm_generic.c
-      The project-selected implementation still stays in pmbus_io.c.
+    - The project-selected implementation stays in pmbus_io.c.
 
     Contract expectations:
     - All functions must be non-blocking.

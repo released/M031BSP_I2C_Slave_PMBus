@@ -403,6 +403,28 @@ Address and alias settings:
 | `PMBUS_I2C_ALIAS_SLOT_ZONE_READ` | `3U` | Platform alias slot used for Zone Read. |
 | `PMBUS_I2C_ALIAS_SLOT_ZONE_WRITE` | `PMBUS_I2C_ALIAS_SLOT_DISABLED` | Zone Write alias is disabled by default on platforms without enough hardware alias slots. |
 
+ARA and ALERT# release policy:
+
+- The SMBus/PMBus transport layer only provides ALERT# drive/release and ARA
+  response transport. It must not decide that ALERT# can be released.
+- Host ARA reads return the alerting device write address and optional PEC.
+  ARA completion does not clear status, clear faults, or release ALERT#.
+- PMBus status reads do not release ALERT#.
+- `CLEAR_FAULTS` clears/re-evaluates PMBus fault state. ALERT# is released
+  only when the PMBus upper-layer alert policy finds no active or latched
+  fault sources after that re-evaluation.
+
+Expected product behavior:
+
+```text
+Fault active -> STATUS update -> assert ALERT#
+Host ARA -> return alerting device address, do not release ALERT#
+Host status read -> report status, do not release ALERT#
+Host CLEAR_FAULTS -> clear latched bits and re-evaluate active sources
+Fault still active -> keep ALERT# low
+Fault cleared -> release ALERT#
+```
+
 PEC and debug settings:
 
 | Define | Default | Purpose |
@@ -616,7 +638,8 @@ flowchart TD
     C -->|No| E[Disable or restore ARA alias]
     D --> F{Host reads ARA}
     F -->|Yes| G[Return alerting device write address]
-    G --> H[Release alert and inhibit ARA until next fault]
+    G --> H[Keep alert policy unchanged]
+    H --> I
     F -->|No| I[Keep alias active]
 
     A --> J{Address change pending from ARP}

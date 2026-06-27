@@ -2662,15 +2662,23 @@ PMBUS_PORT_I2C_ISR_PROTOTYPE
                 pmbus_io_i2c_disable_timeout_counter();
                 if (g_request_target == PMBUS_REQUEST_TARGET_ARA)
                 {
-                    pmbus_app_release_alert();
-                    g_ara_alias_inhibit = 1U;
 #if PMBUS_I2C_ALIAS_SLOT_ARA == PMBUS_I2C_ALIAS_SLOT_DISABLED
+                    /*
+                        The single-address fallback must restore the normal
+                        address after ARA so the host can read STATUS and send
+                        CLEAR_FAULTS. This is an address-ownership guard only;
+                        ALERT# remains controlled by the PMBus alert policy.
+                    */
+                    g_ara_alias_inhibit = 1U;
                     pmbus_drv_restore_normal_address();
+                    pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARA_ALIAS, g_current_slave_address_7bit, 0U);
 #else
-                    g_ara_alias_active = 0U;
+                    /*
+                        With a real alias slot, keep ARA available as long as
+                        the upper-layer alert policy keeps ALERT# asserted.
+                    */
                     pmbus_drv_configure_alias_addresses();
 #endif
-                    pmbus_drv_queue_event(PMBUS_DEBUG_EVENT_ARA_ALIAS, g_current_slave_address_7bit, 0U);
                 }
                 g_request_target = PMBUS_REQUEST_TARGET_NORMAL;
                 g_request_address_7bit = pmbus_app_get_slave_address_7bit();

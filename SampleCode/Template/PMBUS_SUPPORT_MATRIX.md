@@ -95,7 +95,7 @@ Hardware note for the current M032 target:
 | `PAGE` | `0x00` | Read Byte, Write Byte | R/W | Config shadow | Current page byte |
 | `OPERATION` | `0x01` | Read Byte, Write Byte | R/W | Config shadow | Operation byte; bit7 drives `STATUS_BYTE.OFF` summary |
 | `ON_OFF_CONFIG` | `0x02` | Read Byte, Write Byte | R/W | Config shadow | On/off policy byte |
-| `CLEAR_FAULTS` | `0x03` | Send Byte | W | Status shadow | Clears latched fault bits and CML source |
+| `CLEAR_FAULTS` | `0x03` | Send Byte | W | Status shadow | Clears latched fault bits and CML source, then re-applies active platform fault sources before ALERT# release policy is evaluated |
 | `PHASE` | `0x04` | Read Byte, Write Byte | R/W | Config shadow | Current phase selector shadow |
 | `PAGE_PLUS_WRITE` | `0x05` | Block Write | W | Config shadow | Page-qualified write wrapper; reuses the target command handler and stores last page/target/payload. TODO: bind to real multi-page rails before product use |
 | `PAGE_PLUS_READ` | `0x06` | Block Write-Read Process Call | R | Config shadow | Page-qualified read wrapper; returns target byte/word/dword/block response as a block payload. TODO: bind to real multi-page rails before product use |
@@ -341,9 +341,10 @@ Recommended usage:
     - 2-byte PEC read: returns the alerting slave write address plus SMBus PEC over `ARA read address + response address`.
   - On M031, the ARA alias is enabled only while ALERT# is asserted and not inhibited.
   - The first ARA response byte is loaded in the `SLA+R ACK` ISR path so the master does not read a stale previous TX byte.
-  - The final ARA response byte clears the next ACK state so the controller reaches a transmit-finished status and releases the alias.
-  - After ARA is served, the portable alias path is inhibited until ALERT# is actually deasserted; this keeps the normal PMBus address available for `STATUS_CML` / `CLEAR_FAULTS`.
-  - The alias is released on the master NACK/STOP completion path.
+  - The final ARA response byte clears the next ACK state so the controller reaches a transmit-finished status.
+  - ARA completion does not clear status or release ALERT#.
+  - With a real alias slot, ARA remains available while the PMBus alert policy keeps ALERT# asserted.
+  - With the single-address fallback, master NACK/STOP restores the normal PMBus address so the host can read `STATUS_CML` and send `CLEAR_FAULTS`; this is an address ownership workaround, not an ALERT# release policy.
 - `ARP` is implemented as a framework-level alias at `0x61` when lab validation policy enables it.
   - Production default policy should leave ARP/UDID disabled unless the final product contract explicitly requires SMBus address resolution.
   - `PREPARE_TO_ARP`, `GET_UDID`, `DIRECTED_GET_UDID`, `ASSIGN_ADDRESS`, and `RESET_DEVICE` are recognized.

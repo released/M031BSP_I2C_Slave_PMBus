@@ -623,9 +623,10 @@ When validating this slave with the Pico PMBus master tool, the intended host-si
     - no-PEC host read expects one byte: alerting slave write address
     - PEC host read expects two bytes: alerting slave write address + SMBus PEC over `ARA read address + response address`
     - first ARA byte must be valid immediately at `SLA+R ACK`; reading a stale previous TX byte is a failure
-    - final ARA byte must drive the controller to a transmit-finished status; debug log should show alias state returning to normal
-    - after ARA is served, the portable alias path must stay inhibited until ALERT# is actually deasserted so the host can read `STATUS_CML` and clear faults at the normal address
-    - after master NACK/STOP, alias must release and normal slave address must respond again
+    - final ARA byte must drive the controller to a transmit-finished status
+    - ARA completion must not clear status or release ALERT#
+    - with a real alias slot, ARA may remain available while ALERT# remains asserted
+    - with the single-address fallback, after master NACK/STOP the normal slave address must respond again so the host can read `STATUS_CML` and send `CLEAR_FAULTS`; this address restore is not an ALERT# release policy
   - ARP alias:
     - `0x61` should ACK when `PMBUS_ENABLE_ARP = 1`
     - `0x61` should not be treated as a required CRPS-default response when `PMBUS_ENABLE_ARP = 0`

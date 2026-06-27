@@ -1999,6 +1999,10 @@ unsigned char pmbus_app_get_slave_address_7bit(void)
 
 void pmbus_app_clear_faults(void)
 {
+    /*
+        CLEAR_FAULTS clears latched status bits only. Active source bits remain
+        owned by the product/platform fault policy and are re-applied below.
+    */
     g_pmbus_app.status_vout = (uint8_t)(g_pmbus_app.status_vout_source & (uint8_t)(~PMBUS_STATUS_VOUT_FAULT_MASK));
     g_pmbus_app.status_iout = (uint8_t)(g_pmbus_app.status_iout_source & (uint8_t)(~PMBUS_STATUS_IOUT_FAULT_MASK));
     g_pmbus_app.status_input = (uint8_t)(g_pmbus_app.status_input_source & (uint8_t)(~PMBUS_STATUS_INPUT_FAULT_MASK));
@@ -2008,13 +2012,11 @@ void pmbus_app_clear_faults(void)
     g_pmbus_app.status_other = (uint8_t)(g_pmbus_app.status_other_source & (uint8_t)(~PMBUS_STATUS_OTHER_FAULT_MASK));
     g_pmbus_app.status_mfr_specific = (uint8_t)(g_pmbus_app.status_mfr_specific_source & (uint8_t)(~PMBUS_STATUS_MFR_SPECIFIC_FAULT_MASK));
     g_pmbus_app.status_fans_1_2 = (uint8_t)(g_pmbus_app.status_fans_1_2_source & (uint8_t)(~PMBUS_STATUS_FANS_1_2_FAULT_MASK));
-    g_pmbus_app.mfr_fault_active = 0U;
 #if PMBUS_ENABLE_CMD_FWUPLOAD
     g_pmbus_app.mfr_fwupload_status = (uint16_t)(g_pmbus_app.mfr_fwupload_status &
         (uint16_t)(PMBUS_FWUPLOAD_STATUS_COMPLETE | PMBUS_FWUPLOAD_STATUS_IN_PROGRESS));
 #endif
-    pmbus_app_release_alert();
-    pmbus_app_refresh_status_and_optional_latch(0U);
+    pmbus_app_refresh_shadow_data();
 }
 
 void pmbus_app_set_busy_state(unsigned char busy)

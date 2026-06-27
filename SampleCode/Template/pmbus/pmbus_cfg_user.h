@@ -258,8 +258,9 @@
 /*
     Runtime protocol service switches:
     - PMBUS_ENABLE_SLAVE_RECOVER enables I2C slave bus-clear/re-init recovery.
-    - PMBUS_ENABLE_ARA_ALIAS enables the lab Alert Response Address workaround
-      when the MCU cannot expose a true second hardware slave address.
+    - PMBUS_ENABLE_ARA_ALIAS enables the Alert Response Address transport
+      service. The PMBus application alert policy decides when ALERT# is
+      asserted or released.
     - PMBUS_ENABLE_ARP enables SMBus ARP/UDID command handling.
     - PMBUS_ENABLE_ZONE_ALIAS enables extra Zone read/write I2C alias address
       handling when supported by the platform I2C port.
@@ -280,7 +281,8 @@
 
 /*
     Hardware alias slot assignment. Use DISABLED when the platform I2C slave
-    cannot expose that alias. ARA may fall back to a software alias workaround.
+    cannot expose that alias. ARA can fall back to a single-address ownership
+    workaround, but that fallback must not decide ALERT# release policy.
 */
 #define PMBUS_I2C_ALIAS_SLOT_DISABLED         0xFFU
 #define PMBUS_I2C_ALIAS_SLOT_ARA              1U

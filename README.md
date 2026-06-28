@@ -65,6 +65,8 @@ SampleCode/Template/Keil/Template.uvprojx  Keil project
 SampleCode/Template/PMBUS_SUPPORT_MATRIX.md
 SampleCode/Template/PMBUS_VALIDATION_CHECKLIST.md
 SMBusI2CScriptForm.csv                     TI SMBus/I2C/SAA Tool ScriptForm validation sequence
+TI_USB_TO_GPIO_2006_PMBUS_SMBUS_SCRIPT_SEQUENCE.md
+                                           TI ScriptForm command inventory and coverage reference
 teraterm_TI_script.log                     Reference UART capture from the TI ScriptForm run
 TI_SMBus_I2C_SAA_Tool_Batch_file.jpg       TI SMBus/I2C/SAA Tool batch-file setup screenshot
 ```
@@ -245,6 +247,7 @@ Reference files:
 
 | File | Purpose |
 | --- | --- |
+| `TI_USB_TO_GPIO_2006_PMBUS_SMBUS_SCRIPT_SEQUENCE.md` | Human-readable reference for the TI ScriptForm sequence, supported/unsupported transaction types, command inventory, and coverage comparison against the Pico GUI PMBus checklist. |
 | `SMBusI2CScriptForm.csv` | TI ScriptForm CSV sequence generated from the M-CRPS validation command order. |
 | `TI_SMBus_I2C_SAA_Tool_Batch_file.jpg` | Screenshot of the TI SMBus & I2C & SAA Debug Tool batch-file setup. |
 | `teraterm_TI_script.log` | UART0 capture from the MCU while the TI ScriptForm sequence was running. |
@@ -259,6 +262,22 @@ Recommended TI ScriptForm setup:
 4. Import or run `SMBusI2CScriptForm.csv` from the TI SMBus & I2C & SAA Debug Tool batch-file flow.
 5. Keep the `Pause,10,` row after each command. It gives the 115200-baud debug UART enough time to drain during long scripted runs.
 6. Match the firmware build profile with the script profile. The included reference CSV targets the M-CRPS command namespace and should be regenerated before using it as a PMBus Base or TI UCD90xxx profile script.
+
+Use `TI_USB_TO_GPIO_2006_PMBUS_SMBUS_SCRIPT_SEQUENCE.md` before editing or running the CSV. It documents:
+
+- `Safe Default Script Sequence`
+- `Controlled Fault Clear Phase`
+- `Optional Extended Read Sequence`
+- `M-CRPS Manufacturer / Profile Command Coverage`
+- `Unsupported By ScriptForm Transaction List`
+- `Optional Probe Commands From Prompt But Not Strict CRPS Default`
+- `Optional High-Risk Control Phase`
+- `SMBALERT# / ARA Test Notes`
+- `Negative Tests`
+- `Current CSV Executable Command Inventory`
+- `Coverage Comparison With Pico GUI PMBus Checklist`
+
+The CSV is best treated as a TI-tool-executable replay subset of the current M-CRPS Pico GUI `Full` flow. It is useful for external-host UART/logic-analyzer correlation, but it is not identical to Pico GUI `Full` because TI ScriptForm cannot express every PMBus transaction or behavior check.
 
 Reference run summary from `teraterm_TI_script.log`:
 
@@ -642,6 +661,7 @@ To switch PEC CRC implementation, set `PMBUS_PEC_BACKEND` in `pmbus_cfg_user.h`:
 ```text
 SampleCode/Template/PMBUS_SUPPORT_MATRIX.md
 SampleCode/Template/PMBUS_VALIDATION_CHECKLIST.md
+TI_USB_TO_GPIO_2006_PMBUS_SMBUS_SCRIPT_SEQUENCE.md
 Host-side validation matrix, if available: docs/PMBUS_TABLE31_GAP_MATRIX.md
 ```
 

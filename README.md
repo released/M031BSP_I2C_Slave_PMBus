@@ -2,7 +2,7 @@
 
 Nuvoton M031 PMBus/SMBus slave firmware validation.
 
-Last updated: 2026/06/28
+Last updated: 2026/06/29
 
 ## Overview
 
@@ -19,6 +19,16 @@ The firmware validates the MCU-side PMBus command execution path: command
 decode, transaction dispatch, PEC, payload generation, status/error behavior,
 and debug traceability. The PMBus/SMBus master host board and validation
 GUI/tool are not prescribed by this workspace and must be selected by the user.
+
+## PMBus Architecture Diagram
+
+The diagram below summarizes how this sample separates the SMBus transport
+layer from the PMBus command/profile layer. The lower layer owns address
+matching, repeated START handling, PEC, SMBALERT#/ARA transport, and bus
+recovery. The PMBus layer owns command dispatch, profile-specific command names,
+status policy, deterministic placeholder data, and product integration hooks.
+
+![PMBus architecture overview](pmbus.png)
 
 ## Target Hardware
 
